@@ -7,7 +7,9 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
-  closestCorners,
+  pointerWithin,
+  rectIntersection,
+  type CollisionDetection,
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
@@ -17,6 +19,17 @@ import { createId, initialData, moveCard, type BoardData } from "@/lib/kanban";
 
 type KanbanBoardProps = {
   onLogout: () => void;
+};
+
+// closestCorners compares rect corners, not pointer position: an empty
+// column's container rect is much larger than a card's, so its corners can
+// lose to a same-sized card in a neighboring column even when the pointer
+// is squarely inside the empty column. Checking pointer containment first
+// (falling back to rectIntersection for edge cases, e.g. the pointer
+// briefly over a gap) matches what the user actually sees.
+const collisionDetection: CollisionDetection = (args) => {
+  const pointerCollisions = pointerWithin(args);
+  return pointerCollisions.length > 0 ? pointerCollisions : rectIntersection(args);
 };
 
 export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
@@ -148,7 +161,7 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
 
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCorners}
+          collisionDetection={collisionDetection}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >

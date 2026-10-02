@@ -150,12 +150,12 @@ gates the Kanban; logout returns to the login screen.
 **Goal:** A reviewed, documented schema for users and their Kanban board,
 saved as JSON, with user sign-off before implementation.
 
-- [ ] Propose a schema covering: users (id, username, password placeholder),
+- [x] Propose a schema covering: users (id, username, password placeholder),
       one board per user, columns (ordered, renameable), cards (id, title,
       details, column, order)
-- [ ] Save the schema as JSON (e.g. `docs/schema.json`) — table/column
+- [x] Save the schema as JSON (e.g. `docs/schema.json`) — table/column
       definitions, types, keys, relationships
-- [ ] Write `docs/DATABASE.md` explaining the approach: why SQLite, file
+- [x] Write `docs/DATABASE.md` explaining the approach: why SQLite, file
       location/creation-on-first-run behavior, how the single-MVP-user
       limitation maps onto a multi-user-capable schema, migration strategy
       (if any) for future changes
@@ -173,16 +173,16 @@ saved as JSON, with user sign-off before implementation.
 **Goal:** API routes to read and mutate a logged-in user's Kanban board,
 backed by the Part 5 schema, with the SQLite DB auto-created on first run.
 
-- [ ] Add a DB layer (e.g. SQLModel or SQLAlchemy + a migration tool, or
+- [x] Add a DB layer (e.g. SQLModel or SQLAlchemy + a migration tool, or
       plain `sqlite3` if kept simple per the "no over-engineering" standard)
       implementing the Part 5 schema
-- [ ] On backend startup, create the SQLite file and tables if they don't
+- [x] On backend startup, create the SQLite file and tables if they don't
       exist; seed the hardcoded MVP user
-- [ ] `GET /api/board` — returns the logged-in user's board (columns + cards)
-- [ ] `PUT /api/board` (or finer-grained routes: rename column, move card,
+- [x] `GET /api/board` — returns the logged-in user's board (columns + cards)
+- [x] `PUT /api/board` (or finer-grained routes: rename column, move card,
       add card, delete card — pick one approach and apply consistently)
-- [ ] All board routes require a valid session from Part 4
-- [ ] Input validation (e.g. Pydantic models) for request bodies
+- [x] All board routes require a valid session from Part 4
+- [x] Input validation (e.g. Pydantic models) for request bodies
 
 **Tests (pytest, backend only — no frontend involved):**
 - DB file is created fresh on first run; tables match the Part 5 schema

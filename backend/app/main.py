@@ -14,6 +14,7 @@ from app.auth import (
     end_session,
     get_current_username,
 )
+from app.board import router as board_router
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
@@ -61,5 +62,7 @@ def session(
 ) -> SessionResponse:
     return SessionResponse(username=username)
 
+
+app.include_router(board_router)
 
 app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")

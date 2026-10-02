@@ -1,0 +1,133 @@
+{
+  "$comment": "Kanban MVP schema. Target engine: SQLite. IDs are app-generated TEXT strings (not autoincrement integers) so they can keep the frontend's existing prefixed-id convention (col-*, card-*) end to end with no translation layer.",
+  "tables": [
+    {
+      "name": "users",
+      "description": "One row per person who can sign in. The MVP only ever seeds a single row ('user'), but the schema supports more from day one.",
+      "columns": [
+        {
+          "name": "id",
+          "type": "INTEGER",
+          "constraints": ["PRIMARY KEY AUTOINCREMENT"],
+          "description": "Internal id, never exposed to the frontend."
+        },
+        {
+          "name": "username",
+          "type": "TEXT",
+          "constraints": ["NOT NULL", "UNIQUE"]
+        },
+        {
+          "name": "password_hash",
+          "type": "TEXT",
+          "constraints": ["NOT NULL"],
+          "description": "Placeholder for a real hashed password. Part 4's login still checks a hardcoded 'user'/'password' pair in-memory and does not read this column yet; it exists so a future change to DB-backed auth doesn't require a schema migration. Seeded with a hash of 'password' for consistency."
+        },
+        {
+          "name": "created_at",
+          "type": "TEXT",
+          "constraints": ["NOT NULL", "DEFAULT (CURRENT_TIMESTAMP)"],
+          "description": "ISO 8601 UTC timestamp, SQLite's default CURRENT_TIMESTAMP format."
+        }
+      ]
+    },
+    {
+      "name": "boards",
+      "description": "One Kanban board per user. The MVP enforces exactly one via a UNIQUE constraint on user_id; a future multi-board feature would just drop that constraint.",
+      "columns": [
+        {
+          "name": "id",
+          "type": "TEXT",
+          "constraints": ["PRIMARY KEY"],
+          "description": "App-generated, e.g. 'board-<random>'."
+        },
+        {
+          "name": "user_id",
+          "type": "INTEGER",
+          "constraints": [
+            "NOT NULL",
+            "UNIQUE",
+            "REFERENCES users(id) ON DELETE CASCADE"
+          ]
+        },
+        {
+          "name": "created_at",
+          "type": "TEXT",
+          "constraints": ["NOT NULL", "DEFAULT (CURRENT_TIMESTAMP)"]
+        }
+      ]
+    },
+    {
+      "name": "columns",
+      "description": "Ordered, renameable Kanban columns belonging to a board.",
+      "columns": [
+        {
+          "name": "id",
+          "type": "TEXT",
+          "constraints": ["PRIMARY KEY"],
+          "description": "App-generated, matches the frontend's existing 'col-*' convention."
+        },
+        {
+          "name": "board_id",
+          "type": "TEXT",
+          "constraints": ["NOT NULL", "REFERENCES boards(id) ON DELETE CASCADE"]
+        },
+        {
+          "name": "title",
+          "type": "TEXT",
+          "constraints": ["NOT NULL"]
+        },
+        {
+          "name": "position",
+          "type": "INTEGER",
+          "constraints": ["NOT NULL"],
+          "description": "0-based display order among the board's columns. Replaces the frontend's implicit array order."
+        }
+      ],
+      "unique_constraints": [["board_id", "position"]]
+    },
+    {
+      "name": "cards",
+      "description": "Cards within a column.",
+      "columns": [
+        {
+          "name": "id",
+          "type": "TEXT",
+          "constraints": ["PRIMARY KEY"],
+          "description": "App-generated, matches the frontend's existing 'card-*' convention."
+        },
+        {
+          "name": "column_id",
+          "type": "TEXT",
+          "constraints": ["NOT NULL", "REFERENCES columns(id) ON DELETE CASCADE"]
+        },
+        {
+          "name": "title",
+          "type": "TEXT",
+          "constraints": ["NOT NULL"]
+        },
+        {
+          "name": "details",
+          "type": "TEXT",
+          "constraints": ["NOT NULL", "DEFAULT ''"]
+        },
+        {
+          "name": "position",
+          "type": "INTEGER",
+          "constraints": ["NOT NULL"],
+          "description": "0-based display order within the card's column. Replaces the frontend's cardIds array order. Moving a card between columns updates column_id and reassigns position."
+        }
+      ],
+      "unique_constraints": [["column_id", "position"]]
+    }
+  ],
+  "relationships": [
+    "users 1--1 boards (one board per user, MVP-only constraint via UNIQUE user_id)",
+    "boards 1--many columns",
+    "columns 1--many cards"
+  ],
+  "frontend_mapping": {
+    "BoardData.columns[]": "SELECT * FROM columns WHERE board_id = ? ORDER BY position",
+    "BoardData.cards (Record<id, Card>)": "SELECT * FROM cards WHERE column_id IN (board's columns), keyed by id",
+    "Column.cardIds[]": "cards for that column_id, ORDER BY position, mapped to their ids"
+  }
+}

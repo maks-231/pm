@@ -1,46 +1,132 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { vi } from "vitest";
 import { KanbanBoard } from "@/components/KanbanBoard";
+import * as api from "@/lib/api";
+import type { BoardData } from "@/lib/kanban";
+
+const baseBoard: BoardData = {
+  columns: [
+    { id: "col-a", title: "Backlog", cardIds: ["card-1"] },
+    { id: "col-b", title: "Discovery", cardIds: [] },
+  ],
+  cards: {
+    "card-1": { id: "card-1", title: "First card", details: "Some notes" },
+  },
+};
 
 const getFirstColumn = () => screen.getAllByTestId(/column-/i)[0];
 
 describe("KanbanBoard", () => {
-  it("renders five columns", () => {
+  it("shows a loading state, then the board", async () => {
+    let resolveBoard: (board: BoardData) => void = () => {};
+    vi.spyOn(api, "getBoard").mockReturnValue(
+      new Promise((resolve) => {
+        resolveBoard = resolve;
+      })
+    );
+
     render(<KanbanBoard onLogout={() => {}} />);
-    expect(screen.getAllByTestId(/column-/i)).toHaveLength(5);
+    expect(screen.getByText(/loading your board/i)).toBeInTheDocument();
+
+    resolveBoard(baseBoard);
+    expect(await screen.findByText("Backlog")).toBeInTheDocument();
+    expect(screen.getAllByTestId(/column-/i)).toHaveLength(2);
   });
 
-  it("renames a column", async () => {
+  it("shows an error with a retry option when the board fails to load", async () => {
+    vi.spyOn(api, "getBoard")
+      .mockRejectedValueOnce(new Error("network error"))
+      .mockResolvedValueOnce(baseBoard);
+
     render(<KanbanBoard onLogout={() => {}} />);
-    const column = getFirstColumn();
+
+    expect(
+      await screen.findByText(/couldn't load your board/i)
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /try again/i }));
+    expect(await screen.findByText("Backlog")).toBeInTheDocument();
+  });
+
+  it("renames a column on blur", async () => {
+    vi.spyOn(api, "getBoard").mockResolvedValue(baseBoard);
+    const renamed = { ...baseBoard, columns: [{ ...baseBoard.columns[0], title: "Triage" }, baseBoard.columns[1]] };
+    vi.spyOn(api, "renameColumn").mockResolvedValue(renamed);
+
+    render(<KanbanBoard onLogout={() => {}} />);
+    const column = await screen.findByTestId("column-col-a");
     const input = within(column).getByLabelText("Column title");
+
     await userEvent.clear(input);
-    await userEvent.type(input, "New Name");
-    expect(input).toHaveValue("New Name");
+    await userEvent.type(input, "Triage");
+    await userEvent.tab();
+
+    expect(api.renameColumn).toHaveBeenCalledWith("col-a", "Triage");
+    expect(await screen.findByDisplayValue("Triage")).toBeInTheDocument();
   });
 
-  it("adds and removes a card", async () => {
+  it("adds and removes a card via the API", async () => {
+    vi.spyOn(api, "getBoard").mockResolvedValue(baseBoard);
+    const withNewCard: BoardData = {
+      columns: [
+        { ...baseBoard.columns[0], cardIds: ["card-1", "card-2"] },
+        baseBoard.columns[1],
+      ],
+      cards: {
+        ...baseBoard.cards,
+        "card-2": { id: "card-2", title: "New card", details: "Notes" },
+      },
+    };
+    vi.spyOn(api, "addCard").mockResolvedValue(withNewCard);
+    vi.spyOn(api, "deleteCard").mockResolvedValue(baseBoard);
+
     render(<KanbanBoard onLogout={() => {}} />);
-    const column = getFirstColumn();
-    const addButton = within(column).getByRole("button", {
-      name: /add a card/i,
-    });
-    await userEvent.click(addButton);
+    const column = await screen.findByTestId("column-col-a");
 
-    const titleInput = within(column).getByPlaceholderText(/card title/i);
-    await userEvent.type(titleInput, "New card");
-    const detailsInput = within(column).getByPlaceholderText(/details/i);
-    await userEvent.type(detailsInput, "Notes");
+    await userEvent.click(
+      within(column).getByRole("button", { name: /add a card/i })
+    );
+    await userEvent.type(
+      within(column).getByPlaceholderText(/card title/i),
+      "New card"
+    );
+    await userEvent.type(
+      within(column).getByPlaceholderText(/details/i),
+      "Notes"
+    );
+    await userEvent.click(
+      within(column).getByRole("button", { name: /add card/i })
+    );
 
-    await userEvent.click(within(column).getByRole("button", { name: /add card/i }));
-
-    expect(within(column).getByText("New card")).toBeInTheDocument();
+    expect(api.addCard).toHaveBeenCalledWith("col-a", "New card", "Notes");
+    expect(await within(column).findByText("New card")).toBeInTheDocument();
 
     const deleteButton = within(column).getByRole("button", {
       name: /delete new card/i,
     });
     await userEvent.click(deleteButton);
 
-    expect(within(column).queryByText("New card")).not.toBeInTheDocument();
+    expect(api.deleteCard).toHaveBeenCalledWith("card-2");
+    await waitFor(() =>
+      expect(within(column).queryByText("New card")).not.toBeInTheDocument()
+    );
+  });
+
+  it("shows a mutation error banner when a request fails", async () => {
+    vi.spyOn(api, "getBoard").mockResolvedValue(baseBoard);
+    vi.spyOn(api, "renameColumn").mockRejectedValue(new Error("boom"));
+
+    render(<KanbanBoard onLogout={() => {}} />);
+    const column = await screen.findByTestId("column-col-a");
+    const input = within(column).getByLabelText("Column title");
+
+    await userEvent.clear(input);
+    await userEvent.type(input, "Triage");
+    await userEvent.tab();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /didn't save/i
+    );
   });
 });

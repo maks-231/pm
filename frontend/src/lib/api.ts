@@ -1,3 +1,5 @@
+import type { BoardData } from "@/lib/kanban";
+
 export type Session = { username: string };
 
 class ApiError extends Error {}
@@ -29,3 +31,37 @@ export const login = (username: string, password: string): Promise<Session> =>
 
 export const logout = (): Promise<void> =>
   request("/api/logout", { method: "POST" });
+
+export const getBoard = (): Promise<BoardData> => request("/api/board");
+
+export const renameColumn = (
+  columnId: string,
+  title: string
+): Promise<BoardData> =>
+  request(`/api/board/columns/${columnId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ title }),
+  });
+
+export const addCard = (
+  columnId: string,
+  title: string,
+  details: string
+): Promise<BoardData> =>
+  request(`/api/board/columns/${columnId}/cards`, {
+    method: "POST",
+    body: JSON.stringify({ title, details }),
+  });
+
+export const deleteCard = (cardId: string): Promise<BoardData> =>
+  request(`/api/board/cards/${cardId}`, { method: "DELETE" });
+
+export const moveCard = (
+  cardId: string,
+  columnId: string,
+  index: number
+): Promise<BoardData> =>
+  request(`/api/board/cards/${cardId}/move`, {
+    method: "PATCH",
+    body: JSON.stringify({ column_id: columnId, index }),
+  });

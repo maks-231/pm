@@ -3,8 +3,8 @@
 A Next.js Kanban board, built as a static export (`output: 'export'` in
 `next.config.ts`) and served by the FastAPI backend — see `backend/AGENTS.md`
 and `scripts/build-frontend.sh`. Gated behind a login screen (hardcoded
-`user`/`password`); the board itself is still in-memory client state, no
-persistence or AI yet — that lands in later plan parts.
+`user`/`password`); the board is fully backend-persisted via `/api/board`
+(Part 6) — no AI chat yet, that's later plan parts.
 
 ## Stack
 
@@ -22,15 +22,21 @@ persistence or AI yet — that lands in later plan parts.
 - `src/app/layout.tsx` — root layout, fonts, page metadata
 - `src/app/globals.css` — Tailwind import + CSS variables (colors, surface,
   shadow)
-- `src/lib/kanban.ts` — data model (`Card`, `Column`, `BoardData`),
-  `initialData` seed data, `moveCard` (drag/drop reordering logic across and
-  within columns), `createId` (client-side id generator)
-- `src/components/KanbanBoard.tsx` — top-level client component; owns board
-  state (`useState`), wires up `DndContext`, renders header + columns +
-  drag overlay
-- `src/components/KanbanColumn.tsx` — one column: renameable title input,
-  droppable area, `SortableContext` of cards, empty-state placeholder,
-  renders `NewCardForm`
+- `src/lib/kanban.ts` — data model (`Card`, `Column`, `BoardData`) and
+  `resolveDropTarget` (pure function turning a dnd-kit drag-end event into
+  the `{columnId, index}` payload `PATCH /api/board/cards/:id/move` expects)
+- `src/components/KanbanBoard.tsx` — top-level client component. Fetches the
+  board from `GET /api/board` on mount; every mutation (rename, add, delete,
+  move) calls the matching `api.ts` function and replaces board state with
+  the full `BoardData` the backend returns — no optimistic updates, no
+  client-side reducer. Handles loading and error states (failed initial
+  load shows a retry button; a failed mutation shows a dismissable-on-next-
+  success banner, see `MUTATION_ERROR_MESSAGE`)
+- `src/components/KanbanColumn.tsx` — one column: renameable title input
+  (local draft state, committed to `onRename` on blur/Enter rather than per
+  keystroke — the rename is a real network request now, not a local state
+  update), droppable area, `SortableContext` of cards, empty-state
+  placeholder, renders `NewCardForm`
 - `src/components/KanbanCard.tsx` — one draggable card (title, details,
   remove button)
 - `src/components/KanbanCardPreview.tsx` — static (non-sortable) card used in
@@ -42,8 +48,9 @@ persistence or AI yet — that lands in later plan parts.
   (passing it a `onLogout` handler)
 - `src/components/LoginScreen.tsx` — username/password form, calls
   `api.login`, shows an inline error on failure
-- `src/lib/api.ts` — thin fetch wrapper for `/api/login`, `/api/logout`,
-  `/api/session`; throws on non-OK responses
+- `src/lib/api.ts` — thin fetch wrapper for auth (`login`, `logout`,
+  `getSession`) and board (`getBoard`, `renameColumn`, `addCard`,
+  `deleteCard`, `moveCard`) endpoints; throws on non-OK responses
 
 ## Data model
 
@@ -53,9 +60,8 @@ type Column = { id: string; title: string; cardIds: string[] };
 type BoardData = { columns: Column[]; cards: Record<string, Card> };
 ```
 
-Board state currently lives only in `KanbanBoard`'s React state and resets on
-reload — there is no persistence layer yet (that's Parts 5-7 of
-`docs/PLAN.md`).
+This is also the API's response shape for `GET /api/board` and every
+mutation route — see `backend/AGENTS.md`.
 
 ## Commands
 
@@ -74,12 +80,19 @@ Run from `frontend/`:
 - `npm run test:e2e` — Playwright against a dev server it starts itself
   (`playwright.config.ts`), plus a backend it also starts (two `webServer`
   entries). Covers auth (login, wrong creds, logout, session survives
-  reload) and board interactions (load, add-card, drag-to-move). Needs `uv`
-  on PATH.
+  reload) and board interactions (load, add-card, drag-to-move, persistence
+  across reload/re-login). Needs `uv` on PATH.
 - `npm run test:e2e:static` — same specs, but against the real static export
   served by the FastAPI backend (`playwright.static.config.ts`); runs
   `scripts/build-frontend.sh` and `uv run uvicorn` as its web server. This is
   the integration test that proves the build Docker ships actually works.
+- Both e2e configs delete `backend/data/app.db` before starting their
+  backend (fresh seeded board every run) and run with `workers: 1` — the
+  board is now real shared backend state for the one hardcoded user, so
+  tests mutate it in sequence rather than each getting an isolated copy.
+  `reuseExistingServer: true` means this reset is skipped if a server was
+  already running on that port; stop any other instance first (including
+  `./scripts/stop.sh` if the Docker container is up) for a clean run.
 - `npm run test:all` — unit + both e2e variants
 - `npm run lint` — ESLint (`eslint-config-next`)
 
@@ -90,7 +103,7 @@ http://localhost:8000.
 
 ## Notes for future work
 
-- No board persistence or AI chat yet — in scope for later plan parts.
+- No AI chat yet — in scope for later plan parts.
 - Column IDs and card IDs are prefixed strings (`col-*`, `card-*`); keep this
   convention if the backend starts generating or validating IDs.
 - Static export means no Next.js server features (SSR, API routes, dynamic

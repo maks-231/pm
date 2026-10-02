@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import clsx from "clsx";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -22,6 +23,20 @@ export const KanbanColumn = ({
 }: KanbanColumnProps) => {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
 
+  // Local draft so typing doesn't fire a rename request per keystroke; the
+  // rename is committed (and the server round trip happens) on blur/Enter.
+  const [titleDraft, setTitleDraft] = useState(column.title);
+  useEffect(() => setTitleDraft(column.title), [column.title]);
+
+  const commitTitle = () => {
+    const trimmed = titleDraft.trim();
+    if (trimmed && trimmed !== column.title) {
+      onRename(column.id, trimmed);
+    } else {
+      setTitleDraft(column.title);
+    }
+  };
+
   return (
     <section
       ref={setNodeRef}
@@ -40,8 +55,14 @@ export const KanbanColumn = ({
             </span>
           </div>
           <input
-            value={column.title}
-            onChange={(event) => onRename(column.id, event.target.value)}
+            value={titleDraft}
+            onChange={(event) => setTitleDraft(event.target.value)}
+            onBlur={commitTitle}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.currentTarget.blur();
+              }
+            }}
             className="mt-3 w-full bg-transparent font-display text-lg font-semibold text-[var(--navy-dark)] outline-none"
             aria-label="Column title"
           />

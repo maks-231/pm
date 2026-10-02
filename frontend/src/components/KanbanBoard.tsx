@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -15,7 +15,8 @@ import {
 } from "@dnd-kit/core";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
-import { createId, initialData, moveCard, type BoardData } from "@/lib/kanban";
+import { resolveDropTarget, type BoardData } from "@/lib/kanban";
+import * as api from "@/lib/api";
 
 type KanbanBoardProps = {
   onLogout: () => void;
@@ -32,9 +33,21 @@ const collisionDetection: CollisionDetection = (args) => {
   return pointerCollisions.length > 0 ? pointerCollisions : rectIntersection(args);
 };
 
+const MUTATION_ERROR_MESSAGE = "That didn't save. Please try again.";
+
 export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
-  const [board, setBoard] = useState<BoardData>(() => initialData);
+  const [board, setBoard] = useState<BoardData | null>(null);
+  const [loadError, setLoadError] = useState(false);
+  const [mutationError, setMutationError] = useState(false);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
+
+  const loadBoard = () => {
+    setLoadError(false);
+    setBoard(null);
+    api.getBoard().then(setBoard).catch(() => setLoadError(true));
+  };
+
+  useEffect(loadBoard, []);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -42,7 +55,12 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
     })
   );
 
-  const cardsById = useMemo(() => board.cards, [board.cards]);
+  const cardsById = useMemo(() => board?.cards ?? {}, [board]);
+
+  const runMutation = (mutation: Promise<BoardData>) => {
+    setMutationError(false);
+    mutation.then(setBoard).catch(() => setMutationError(true));
+  };
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveCardId(event.active.id as string);
@@ -52,61 +70,62 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
     const { active, over } = event;
     setActiveCardId(null);
 
-    if (!over || active.id === over.id) {
+    if (!board || !over || active.id === over.id) {
       return;
     }
 
-    setBoard((prev) => ({
-      ...prev,
-      columns: moveCard(prev.columns, active.id as string, over.id as string),
-    }));
+    const target = resolveDropTarget(
+      board.columns,
+      active.id as string,
+      over.id as string
+    );
+    if (!target) {
+      return;
+    }
+
+    runMutation(api.moveCard(active.id as string, target.columnId, target.index));
   };
 
   const handleRenameColumn = (columnId: string, title: string) => {
-    setBoard((prev) => ({
-      ...prev,
-      columns: prev.columns.map((column) =>
-        column.id === columnId ? { ...column, title } : column
-      ),
-    }));
+    runMutation(api.renameColumn(columnId, title));
   };
 
   const handleAddCard = (columnId: string, title: string, details: string) => {
-    const id = createId("card");
-    setBoard((prev) => ({
-      ...prev,
-      cards: {
-        ...prev.cards,
-        [id]: { id, title, details: details || "No details yet." },
-      },
-      columns: prev.columns.map((column) =>
-        column.id === columnId
-          ? { ...column, cardIds: [...column.cardIds, id] }
-          : column
-      ),
-    }));
+    runMutation(api.addCard(columnId, title, details || "No details yet."));
   };
 
-  const handleDeleteCard = (columnId: string, cardId: string) => {
-    setBoard((prev) => {
-      return {
-        ...prev,
-        cards: Object.fromEntries(
-          Object.entries(prev.cards).filter(([id]) => id !== cardId)
-        ),
-        columns: prev.columns.map((column) =>
-          column.id === columnId
-            ? {
-                ...column,
-                cardIds: column.cardIds.filter((id) => id !== cardId),
-              }
-            : column
-        ),
-      };
-    });
+  const handleDeleteCard = (_columnId: string, cardId: string) => {
+    runMutation(api.deleteCard(cardId));
   };
 
   const activeCard = activeCardId ? cardsById[activeCardId] : null;
+
+  if (loadError) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[var(--surface)] px-6 text-center">
+        <p className="text-sm font-medium text-[var(--gray-text)]">
+          Couldn&apos;t load your board.
+        </p>
+        <button
+          type="button"
+          onClick={loadBoard}
+          className="rounded-full bg-[var(--secondary-purple)] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:brightness-110"
+        >
+          Try again
+        </button>
+      </div>
+    );
+  }
+
+  if (!board) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[var(--surface)]">
+        <p className="text-sm font-medium text-[var(--gray-text)]">
+          Loading your board…
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="relative overflow-hidden">
@@ -157,6 +176,11 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
               </div>
             ))}
           </div>
+          {mutationError && (
+            <p role="alert" className="text-sm font-medium text-red-600">
+              {MUTATION_ERROR_MESSAGE}
+            </p>
+          )}
         </header>
 
         <DndContext

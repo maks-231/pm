@@ -204,13 +204,13 @@ backed by the Part 5 schema, with the SQLite DB auto-created on first run.
 **Goal:** The Kanban board in the browser is backed by the real API from
 Part 6 — changes persist across reloads and logins.
 
-- [ ] Replace the frontend's in-memory `initialData` (`src/lib/kanban.ts`)
+- [x] Replace the frontend's in-memory `initialData` (`src/lib/kanban.ts`)
       with a fetch from `GET /api/board` on load
-- [ ] Wire rename-column, add-card, delete-card, and move-card (drag/drop)
+- [x] Wire rename-column, add-card, delete-card, and move-card (drag/drop)
       handlers in `KanbanBoard.tsx` to call the Part 6 API routes instead of
       only updating local state
-- [ ] Handle loading and error states (board fetch fails, mutation fails)
-- [ ] Confirm the static-export frontend can call the FastAPI backend from
+- [x] Handle loading and error states (board fetch fails, mutation fails)
+- [x] Confirm the static-export frontend can call the FastAPI backend from
       the same origin (no CORS issues) in the Docker setup
 
 **Tests:**

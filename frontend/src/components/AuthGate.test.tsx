@@ -3,6 +3,9 @@ import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 import { AuthGate } from "@/components/AuthGate";
 import * as api from "@/lib/api";
+import type { BoardData } from "@/lib/kanban";
+
+const emptyBoard: BoardData = { columns: [], cards: {} };
 
 describe("AuthGate", () => {
   it("shows the login screen when there is no session", async () => {
@@ -15,6 +18,7 @@ describe("AuthGate", () => {
 
   it("shows the kanban board when a session already exists", async () => {
     vi.spyOn(api, "getSession").mockResolvedValue({ username: "user" });
+    vi.spyOn(api, "getBoard").mockResolvedValue(emptyBoard);
 
     render(<AuthGate />);
 
@@ -24,6 +28,7 @@ describe("AuthGate", () => {
 
   it("returns to the login screen after logging out", async () => {
     vi.spyOn(api, "getSession").mockResolvedValue({ username: "user" });
+    vi.spyOn(api, "getBoard").mockResolvedValue(emptyBoard);
     vi.spyOn(api, "logout").mockResolvedValue(undefined);
 
     render(<AuthGate />);

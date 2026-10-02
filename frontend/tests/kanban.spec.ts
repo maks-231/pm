@@ -82,3 +82,24 @@ test("moves a card into an empty column", async ({ page }) => {
 
   await expect(discovery.getByTestId("card-card-1")).toBeVisible();
 });
+
+test("persists changes across a reload and a fresh login", async ({ page }) => {
+  await page.goto("/");
+  const firstColumn = page.locator('[data-testid^="column-"]').first();
+  await firstColumn.getByRole("button", { name: /add a card/i }).click();
+  await firstColumn.getByPlaceholder("Card title").fill("Persisted card");
+  await firstColumn.getByRole("button", { name: /add card/i }).click();
+  await expect(firstColumn.getByText("Persisted card")).toBeVisible();
+
+  await page.reload();
+  await expect(firstColumn.getByText("Persisted card")).toBeVisible();
+
+  await page.getByRole("button", { name: /log out/i }).click();
+  await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+
+  await page.getByLabel("Username").fill("user");
+  await page.getByLabel("Password").fill("password");
+  await page.getByRole("button", { name: /sign in/i }).click();
+
+  await expect(firstColumn.getByText("Persisted card")).toBeVisible();
+});

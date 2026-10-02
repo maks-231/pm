@@ -232,13 +232,13 @@ reload; no console errors; full test suite (unit + e2e + backend) green.
 **Goal:** The backend can call the Anthropic API and this is verified with a
 trivial end-to-end request.
 
-- [ ] Add an Anthropic SDK dependency to the backend
-- [ ] Read `ANTHROPIC_API_KEY` and `CHAT_MODEL` (default
+- [x] Add an Anthropic SDK dependency to the backend
+- [x] Read `ANTHROPIC_API_KEY` and `CHAT_MODEL` (default
       `claude-haiku-4-5-20251001`) from `.env`
-- [ ] `POST /api/ai/ping` (or similar internal/test-only route) that sends a
+- [x] `POST /api/ai/ping` (or similar internal/test-only route) that sends a
       fixed prompt like "What is 2+2? Answer with only the number." and
       returns the model's reply
-- [ ] Fail clearly (clean error, not a crash) if the API key is missing
+- [x] Fail clearly (clean error, not a crash) if the API key is missing
 
 **Tests (pytest):**
 - With a valid key (live call, acceptable for this narrowly-scoped

@@ -1,15 +1,17 @@
 # Backend
 
 FastAPI backend, managed with `uv`. Serves the built Next.js frontend as
-static files, a hardcoded-credentials login flow, and a SQLite-backed
-Kanban board API; AI routes land in later plan parts — see `docs/PLAN.md`.
+static files, a hardcoded-credentials login flow, a SQLite-backed Kanban
+board API, and a connectivity-only Anthropic AI route; the full chat
+feature lands in Part 9 — see `docs/PLAN.md`.
 
 ## Structure
 
-- `pyproject.toml` / `uv.lock` — dependencies (`fastapi`, `uvicorn[standard]`
-  runtime; `pytest`, `httpx` dev)
+- `pyproject.toml` / `uv.lock` — dependencies (`fastapi`, `uvicorn[standard]`,
+  `anthropic`, `python-dotenv` runtime; `pytest`, `httpx` dev)
 - `app/main.py` — FastAPI app: `GET /api/hello`, auth routes, includes the
-  board router, and a `StaticFiles` mount at `/` serving `static/`
+  board and AI routers, loads `.env` (see Environment below), and a
+  `StaticFiles` mount at `/` serving `static/`
 - `app/auth.py` — session logic: hardcoded `user`/`password` check, an
   in-memory `token -> username` store, and the `get_current_username`
   dependency used to guard routes
@@ -17,6 +19,8 @@ Kanban board API; AI routes land in later plan parts — see `docs/PLAN.md`.
   `get_connection()` (see Database below)
 - `app/board.py` — `/api/board` routes: read and mutate the logged-in
   user's board
+- `app/ai.py` — `POST /api/ai/ping`: a connectivity check against the
+  Anthropic API (see AI below)
 - `static/` — **generated**, gitignored (only `.gitkeep` is tracked so the
   directory always exists). Populated by `scripts/build-frontend.sh` or the
   Docker build's frontend stage, never edited by hand. Empty on a fresh
@@ -34,6 +38,9 @@ Kanban board API; AI routes land in later plan parts — see `docs/PLAN.md`.
 - `tests/test_board.py` — DB schema creation, seeded board shape, every
   mutation's happy path + persistence-on-refetch, ownership/404s for
   unknown ids, validation errors, and that every route requires login.
+- `tests/test_ai.py` — login gating, clean 503 when `ANTHROPIC_API_KEY` is
+  unset, and a **live call** to the real Anthropic API asserting the reply
+  contains "4". See AI below.
 
 ## Database
 
@@ -82,6 +89,33 @@ Kanban board API; AI routes land in later plan parts — see `docs/PLAN.md`.
   this MVP (single process, local Docker container); restarting the
   container logs everyone out. Revisit if the app ever runs multi-process.
 
+## Environment
+
+`app/main.py` calls `load_dotenv()` against the repo-root `.env` on import.
+Docker doesn't need this (docker-compose's `env_file: .env` injects the
+variables directly into the container), but local/test runs (`uv run
+uvicorn`, `uv run pytest`) aren't going through Docker, so without this
+call they'd never see `.env` at all.
+
+- `ANTHROPIC_API_KEY` — required for `/api/ai/ping` to work; the route
+  returns a clean 503 (not a crash) if it's missing.
+- `CHAT_MODEL` — optional, defaults to `claude-haiku-4-5-20251001`
+  (`app/ai.py`'s `DEFAULT_MODEL`).
+
+## AI
+
+- `POST /api/ai/ping` — session-protected (like every other non-auth
+  route). Sends a fixed "What is 2+2?" prompt to the configured model and
+  returns `{reply}`. This exists purely to prove the API key and model
+  work end to end; it's not part of the real chat feature (Part 9).
+- Errors from the Anthropic SDK (`anthropic.APIError` and subclasses —
+  bad key, rate limit, network) are caught and surfaced as a 502, not an
+  unhandled exception.
+- `tests/test_ai.py`'s connectivity test makes a **real network call** to
+  Anthropic on every `pytest` run (per `docs/PLAN.md` Part 8, which calls
+  this acceptable for a narrowly-scoped check). It costs a few tokens and
+  needs `ANTHROPIC_API_KEY` set; there's no mocked fallback.
+
 ## Commands
 
 Run from `backend/`:
@@ -110,4 +144,5 @@ container.
 
 ## Notes for future work
 
-- No AI routes yet (Parts 8-9).
+- `/api/ai/ping` is connectivity-only; the real board-aware chat with
+  structured output lands in Part 9.

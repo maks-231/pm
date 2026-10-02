@@ -1,9 +1,11 @@
 from pathlib import Path
 from typing import Annotated
 
+from dotenv import load_dotenv
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Response, status
 from fastapi.staticfiles import StaticFiles
 
+from app.ai import router as ai_router
 from app.auth import (
     COOKIE_NAME,
     HARDCODED_PASSWORD,
@@ -17,6 +19,10 @@ from app.auth import (
 from app.board import router as board_router
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+
+# Docker injects .env via docker-compose's env_file, but local/test runs
+# (uv run uvicorn, uv run pytest) don't go through Docker, so load it here.
+load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env")
 
 app = FastAPI(title="Project Management MVP")
 
@@ -64,5 +70,6 @@ def session(
 
 
 app.include_router(board_router)
+app.include_router(ai_router)
 
 app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")

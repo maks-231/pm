@@ -19,12 +19,12 @@ For the MVP, this will run locally (in a docker container)
 
 ## Technical Decisions
 
-- NextJS frontend
-- Python FastAPI backend, including serving the static NextJS site at /
+- NextJS frontend, statically exported (`output: 'export'`)
+- Python FastAPI backend, serving the static NextJS export at / via StaticFiles
 - Everything packaged into a Docker container
 - Use "uv" as the package manager for python in the Docker container
-- Use OpenRouter for the AI calls. An OPENROUTER_API_KEY is in .env in the project root
-- Use `openai/gpt-oss-120b` as the model
+- Use the Anthropic API for the AI calls. An ANTHROPIC_API_KEY is in .env in the project root
+- Use `claude-haiku-4-5-20251001` as the model (overridable via CHAT_MODEL in .env)
 - Use SQLLite local database for the database, creating a new db if it doesn't exist
 - Start and Stop server scripts for Mac, PC, Linux in scripts/
 

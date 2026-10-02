@@ -174,3 +174,8 @@ cython_debug/
 
 .DS_Store
 
+# Generated frontend static export, copied in by scripts/build-frontend.sh
+# or the Docker build. See backend/AGENTS.md.
+backend/static/*
+!backend/static/.gitkeep
+

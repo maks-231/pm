@@ -42,7 +42,7 @@ class MoveCardRequest(BaseModel):
     index: int = Field(ge=0)
 
 
-def _get_user_id(conn: sqlite3.Connection, username: str) -> int:
+def get_user_id(conn: sqlite3.Connection, username: str) -> int:
     row = conn.execute(
         "SELECT id FROM users WHERE username = ?", (username,)
     ).fetchone()
@@ -52,7 +52,7 @@ def _get_user_id(conn: sqlite3.Connection, username: str) -> int:
     return row["id"]
 
 
-def _get_board_id(conn: sqlite3.Connection, user_id: int) -> str:
+def get_board_id(conn: sqlite3.Connection, user_id: int) -> str:
     row = conn.execute(
         "SELECT id FROM boards WHERE user_id = ?", (user_id,)
     ).fetchone()
@@ -62,7 +62,12 @@ def _get_board_id(conn: sqlite3.Connection, user_id: int) -> str:
     return row["id"]
 
 
-def _column_belongs_to_board(
+def board_id_for(conn: sqlite3.Connection, username: str) -> str:
+    user_id = get_user_id(conn, username)
+    return get_board_id(conn, user_id)
+
+
+def column_belongs_to_board(
     conn: sqlite3.Connection, column_id: str, board_id: str
 ) -> bool:
     row = conn.execute(
@@ -72,7 +77,7 @@ def _column_belongs_to_board(
     return row is not None
 
 
-def _card_belongs_to_board(
+def card_belongs_to_board(
     conn: sqlite3.Connection, card_id: str, board_id: str
 ) -> bool:
     row = conn.execute(
@@ -87,7 +92,7 @@ def _card_belongs_to_board(
     return row is not None
 
 
-def _serialize_board(conn: sqlite3.Connection, board_id: str) -> BoardResponse:
+def serialize_board(conn: sqlite3.Connection, board_id: str) -> BoardResponse:
     column_rows = conn.execute(
         "SELECT id, title FROM columns WHERE board_id = ? ORDER BY position",
         (board_id,),
@@ -118,9 +123,87 @@ def _serialize_board(conn: sqlite3.Connection, board_id: str) -> BoardResponse:
     return BoardResponse(columns=columns, cards=cards)
 
 
-def _board_id_for(conn: sqlite3.Connection, username: str) -> str:
-    user_id = _get_user_id(conn, username)
-    return _get_board_id(conn, user_id)
+# --- Pure DB mutations -------------------------------------------------
+# Shared by the HTTP routes below and app/ai.py's operation applier. These
+# never commit themselves (the caller controls the transaction boundary)
+# and report success via return value rather than raising, so a caller can
+# decide how to react to a not-found id (HTTP 404 vs. silently skipping an
+# AI-proposed operation that referenced a stale id).
+
+
+def rename_column_db(
+    conn: sqlite3.Connection, board_id: str, column_id: str, title: str
+) -> bool:
+    if not column_belongs_to_board(conn, column_id, board_id):
+        return False
+    conn.execute("UPDATE columns SET title = ? WHERE id = ?", (title, column_id))
+    return True
+
+
+def add_card_db(
+    conn: sqlite3.Connection,
+    board_id: str,
+    column_id: str,
+    title: str,
+    details: str = "",
+) -> str | None:
+    if not column_belongs_to_board(conn, column_id, board_id):
+        return None
+    next_position_row = conn.execute(
+        "SELECT COALESCE(MAX(position) + 1, 0) AS next_position "
+        "FROM cards WHERE column_id = ?",
+        (column_id,),
+    ).fetchone()
+    card_id = f"card-{secrets.token_hex(6)}"
+    conn.execute(
+        "INSERT INTO cards (id, column_id, title, details, position) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (card_id, column_id, title, details, next_position_row["next_position"]),
+    )
+    return card_id
+
+
+def delete_card_db(conn: sqlite3.Connection, board_id: str, card_id: str) -> bool:
+    if not card_belongs_to_board(conn, card_id, board_id):
+        return False
+    conn.execute("DELETE FROM cards WHERE id = ?", (card_id,))
+    return True
+
+
+def move_card_db(
+    conn: sqlite3.Connection,
+    board_id: str,
+    card_id: str,
+    column_id: str,
+    index: int,
+) -> bool:
+    if not card_belongs_to_board(conn, card_id, board_id):
+        return False
+    if not column_belongs_to_board(conn, column_id, board_id):
+        return False
+
+    target_rows = conn.execute(
+        "SELECT id FROM cards WHERE column_id = ? ORDER BY position",
+        (column_id,),
+    ).fetchall()
+    target_ids = [row["id"] for row in target_rows if row["id"] != card_id]
+    index = min(max(index, 0), len(target_ids))
+    target_ids.insert(index, card_id)
+
+    # Two phases to avoid tripping the (column_id, position) UNIQUE
+    # constraint against rows not yet moved out of the way: stage
+    # everything at negative positions first, then assign final ones.
+    for offset, cid in enumerate(target_ids):
+        conn.execute(
+            "UPDATE cards SET column_id = ?, position = ? WHERE id = ?",
+            (column_id, -(offset + 1), cid),
+        )
+    for position, cid in enumerate(target_ids):
+        conn.execute("UPDATE cards SET position = ? WHERE id = ?", (position, cid))
+    return True
+
+
+# --- HTTP routes ---------------------------------------------------------
 
 
 @router.get("", response_model=BoardResponse)
@@ -129,8 +212,8 @@ def get_board(
 ) -> BoardResponse:
     conn = get_connection()
     try:
-        board_id = _board_id_for(conn, username)
-        return _serialize_board(conn, board_id)
+        board_id = board_id_for(conn, username)
+        return serialize_board(conn, board_id)
     finally:
         conn.close()
 
@@ -143,15 +226,11 @@ def rename_column(
 ) -> BoardResponse:
     conn = get_connection()
     try:
-        board_id = _board_id_for(conn, username)
-        if not _column_belongs_to_board(conn, column_id, board_id):
+        board_id = board_id_for(conn, username)
+        if not rename_column_db(conn, board_id, column_id, body.title):
             raise HTTPException(status_code=404, detail="Column not found")
-
-        conn.execute(
-            "UPDATE columns SET title = ? WHERE id = ?", (body.title, column_id)
-        )
         conn.commit()
-        return _serialize_board(conn, board_id)
+        return serialize_board(conn, board_id)
     finally:
         conn.close()
 
@@ -168,29 +247,12 @@ def add_card(
 ) -> BoardResponse:
     conn = get_connection()
     try:
-        board_id = _board_id_for(conn, username)
-        if not _column_belongs_to_board(conn, column_id, board_id):
+        board_id = board_id_for(conn, username)
+        card_id = add_card_db(conn, board_id, column_id, body.title, body.details)
+        if card_id is None:
             raise HTTPException(status_code=404, detail="Column not found")
-
-        next_position_row = conn.execute(
-            "SELECT COALESCE(MAX(position) + 1, 0) AS next_position "
-            "FROM cards WHERE column_id = ?",
-            (column_id,),
-        ).fetchone()
-        card_id = f"card-{secrets.token_hex(6)}"
-        conn.execute(
-            "INSERT INTO cards (id, column_id, title, details, position) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (
-                card_id,
-                column_id,
-                body.title,
-                body.details,
-                next_position_row["next_position"],
-            ),
-        )
         conn.commit()
-        return _serialize_board(conn, board_id)
+        return serialize_board(conn, board_id)
     finally:
         conn.close()
 
@@ -202,13 +264,11 @@ def delete_card(
 ) -> BoardResponse:
     conn = get_connection()
     try:
-        board_id = _board_id_for(conn, username)
-        if not _card_belongs_to_board(conn, card_id, board_id):
+        board_id = board_id_for(conn, username)
+        if not delete_card_db(conn, board_id, card_id):
             raise HTTPException(status_code=404, detail="Card not found")
-
-        conn.execute("DELETE FROM cards WHERE id = ?", (card_id,))
         conn.commit()
-        return _serialize_board(conn, board_id)
+        return serialize_board(conn, board_id)
     finally:
         conn.close()
 
@@ -221,33 +281,13 @@ def move_card(
 ) -> BoardResponse:
     conn = get_connection()
     try:
-        board_id = _board_id_for(conn, username)
-        if not _card_belongs_to_board(conn, card_id, board_id):
+        board_id = board_id_for(conn, username)
+        if not card_belongs_to_board(conn, card_id, board_id):
             raise HTTPException(status_code=404, detail="Card not found")
-        if not _column_belongs_to_board(conn, body.column_id, board_id):
+        if not column_belongs_to_board(conn, body.column_id, board_id):
             raise HTTPException(status_code=404, detail="Target column not found")
-
-        target_rows = conn.execute(
-            "SELECT id FROM cards WHERE column_id = ? ORDER BY position",
-            (body.column_id,),
-        ).fetchall()
-        target_ids = [row["id"] for row in target_rows if row["id"] != card_id]
-        index = min(body.index, len(target_ids))
-        target_ids.insert(index, card_id)
-
-        # Two phases to avoid tripping the (column_id, position) UNIQUE
-        # constraint against rows not yet moved out of the way: stage
-        # everything at negative positions first, then assign final ones.
-        for offset, cid in enumerate(target_ids):
-            conn.execute(
-                "UPDATE cards SET column_id = ?, position = ? WHERE id = ?",
-                (body.column_id, -(offset + 1), cid),
-            )
-        for position, cid in enumerate(target_ids):
-            conn.execute(
-                "UPDATE cards SET position = ? WHERE id = ?", (position, cid)
-            )
+        move_card_db(conn, board_id, card_id, body.column_id, body.index)
         conn.commit()
-        return _serialize_board(conn, board_id)
+        return serialize_board(conn, board_id)
     finally:
         conn.close()

@@ -258,20 +258,20 @@ test run), confirming the key and model work end-to-end.
 question, and conversation history, and gets back structured output: a chat
 reply plus an optional board update.
 
-- [ ] Define a structured output schema for the Anthropic response: a reply
+- [x] Define a structured output schema for the Anthropic response: a reply
       message (string) and an optional board mutation payload (reusing/
       extending the Part 5/6 board shape — e.g. a list of operations like
       rename-column, add-card, move-card, delete-card)
-- [ ] `POST /api/ai/chat` accepting `{ message, history }`, loading the
+- [x] `POST /api/ai/chat` accepting `{ message, history }`, loading the
       logged-in user's current board, and calling Anthropic with: system
       prompt describing the assistant's role and the board schema, the
       current board JSON, the conversation history, and the new message
-- [ ] Parse and validate the structured response (e.g. Pydantic model
+- [x] Parse and validate the structured response (e.g. Pydantic model
       matching the Anthropic structured-output schema); reject/retry on
       malformed output rather than silently failing
-- [ ] If the response includes a board update, apply it via the Part 6 DB
+- [x] If the response includes a board update, apply it via the Part 6 DB
       layer and return the updated board alongside the chat reply
-- [ ] Persist conversation history per user (in DB or in-memory per session —
+- [x] Persist conversation history per user (in DB or in-memory per session —
       decide based on MVP scope; document the choice)
 
 **Tests (pytest, can mock the Anthropic call for deterministic cases plus at

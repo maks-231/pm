@@ -64,9 +64,14 @@ named function reused elsewhere), and replace `KanbanColumn`'s
 prop-mirroring effect with `key={column.id}` reset or a derived-state
 pattern, per the pattern React's docs link in the lint output.
 
-### 2. Failed column rename leaves a stale, unsaved title in the input
+### 2. Failed column rename leaves a stale, unsaved title in the input — FIXED
 **File:** `frontend/src/components/KanbanColumn.tsx:28-38`
 **Severity:** Medium (silent data-integrity illusion in the UI)
+**Status:** Fixed. `KanbanBoard.handleRenameColumn` now returns the
+`runMutation` promise (`Promise<boolean>`), and `KanbanColumn.commitTitle`
+resets `titleDraft` back to `column.title` when that promise resolves
+`false`, so a rejected rename no longer leaves the input showing an
+unsaved edit.
 
 ```ts
 const [titleDraft, setTitleDraft] = useState(column.title);
@@ -217,8 +222,7 @@ the corrective user message.
 
 1. ~~Finding 1 (lint failures)~~ — **fixed**, `npm run lint` is green.
 2. ~~Finding 3 (add-card data loss)~~ — **fixed**.
-3. Finding 2 (stale rename input) — same class of bug as #3, still open;
-   lower frequency (requires hitting the 200-char cap or a backend error).
+3. ~~Finding 2 (stale rename input)~~ — **fixed**.
 4. Finding 4 (tsconfig types) — cheap, closes a blind spot for future
    changes.
 5. Finding 5 (AI retry edge case) — narrow, low likelihood given forced

@@ -100,9 +100,8 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
     runMutation(api.moveCard(active.id as string, target.columnId, target.index));
   };
 
-  const handleRenameColumn = (columnId: string, title: string) => {
+  const handleRenameColumn = (columnId: string, title: string) =>
     runMutation(api.renameColumn(columnId, title));
-  };
 
   const handleAddCard = (columnId: string, title: string, details: string) =>
     runMutation(api.addCard(columnId, title, details || "No details yet."));

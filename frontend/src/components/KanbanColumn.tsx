@@ -9,7 +9,7 @@ import { NewCardForm } from "@/components/NewCardForm";
 type KanbanColumnProps = {
   column: Column;
   cards: Card[];
-  onRename: (columnId: string, title: string) => void;
+  onRename: (columnId: string, title: string) => Promise<boolean>;
   onAddCard: (columnId: string, title: string, details: string) => Promise<boolean>;
   onDeleteCard: (columnId: string, cardId: string) => void;
 };
@@ -38,7 +38,13 @@ export const KanbanColumn = ({
   const commitTitle = () => {
     const trimmed = titleDraft.trim();
     if (trimmed && trimmed !== column.title) {
-      onRename(column.id, trimmed);
+      // Revert the draft on failure; a successful rename flows back in via
+      // the `column.title !== prevTitle` render-time resync above.
+      onRename(column.id, trimmed).then((succeeded) => {
+        if (!succeeded) {
+          setTitleDraft(column.title);
+        }
+      });
     } else {
       setTitleDraft(column.title);
     }

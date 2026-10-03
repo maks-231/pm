@@ -30,7 +30,7 @@ reviewed, and document the existing frontend code.
 - [x] Create `frontend/AGENTS.md` describing the existing frontend code
 - [x] Update root `AGENTS.md` to reflect the Anthropic-API and static-export
       decisions
-- [ ] User reviews and approves this plan before Part 2 starts
+- [x] User reviews and approves this plan before Part 2 starts
 
 **Tests:** none (planning only).
 
@@ -159,7 +159,7 @@ saved as JSON, with user sign-off before implementation.
       location/creation-on-first-run behavior, how the single-MVP-user
       limitation maps onto a multi-user-capable schema, migration strategy
       (if any) for future changes
-- [ ] Present schema + doc to the user and get explicit sign-off
+- [x] Present schema + doc to the user and get explicit sign-off
 
 **Tests:** none (design artifact only — no code yet).
 

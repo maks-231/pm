@@ -48,7 +48,12 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
     api.getBoard().then(setBoard).catch(() => setLoadError(true));
   };
 
-  useEffect(loadBoard, []);
+  // Not loadBoard() directly: that resets state synchronously before the
+  // fetch, which is only needed for the "Try again" button's retry case,
+  // not the initial mount (state already starts at these defaults).
+  useEffect(() => {
+    api.getBoard().then(setBoard).catch(() => setLoadError(true));
+  }, []);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -58,9 +63,17 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
 
   const cardsById = useMemo(() => board?.cards ?? {}, [board]);
 
-  const runMutation = (mutation: Promise<BoardData>) => {
+  const runMutation = (mutation: Promise<BoardData>): Promise<boolean> => {
     setMutationError(false);
-    mutation.then(setBoard).catch(() => setMutationError(true));
+    return mutation
+      .then((updated) => {
+        setBoard(updated);
+        return true;
+      })
+      .catch(() => {
+        setMutationError(true);
+        return false;
+      });
   };
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -91,9 +104,8 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
     runMutation(api.renameColumn(columnId, title));
   };
 
-  const handleAddCard = (columnId: string, title: string, details: string) => {
+  const handleAddCard = (columnId: string, title: string, details: string) =>
     runMutation(api.addCard(columnId, title, details || "No details yet."));
-  };
 
   const handleDeleteCard = (_columnId: string, cardId: string) => {
     runMutation(api.deleteCard(cardId));

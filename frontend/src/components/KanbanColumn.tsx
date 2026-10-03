@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import clsx from "clsx";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -10,7 +10,7 @@ type KanbanColumnProps = {
   column: Column;
   cards: Card[];
   onRename: (columnId: string, title: string) => void;
-  onAddCard: (columnId: string, title: string, details: string) => void;
+  onAddCard: (columnId: string, title: string, details: string) => Promise<boolean>;
   onDeleteCard: (columnId: string, cardId: string) => void;
 };
 
@@ -25,8 +25,15 @@ export const KanbanColumn = ({
 
   // Local draft so typing doesn't fire a rename request per keystroke; the
   // rename is committed (and the server round trip happens) on blur/Enter.
+  // Resynced during render (not an effect, per React's "adjusting state
+  // when a prop changes" guidance) when the column's title changes from
+  // outside this component.
+  const [prevTitle, setPrevTitle] = useState(column.title);
   const [titleDraft, setTitleDraft] = useState(column.title);
-  useEffect(() => setTitleDraft(column.title), [column.title]);
+  if (column.title !== prevTitle) {
+    setPrevTitle(column.title);
+    setTitleDraft(column.title);
+  }
 
   const commitTitle = () => {
     const trimmed = titleDraft.trim();

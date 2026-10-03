@@ -4,7 +4,8 @@ A Next.js Kanban board, built as a static export (`output: 'export'` in
 `next.config.ts`) and served by the FastAPI backend — see `backend/AGENTS.md`
 and `scripts/build-frontend.sh`. Gated behind a login screen (hardcoded
 `user`/`password`); the board is fully backend-persisted via `/api/board`
-(Part 6) — no AI chat yet, that's later plan parts.
+(Part 6), with an AI chat sidebar (Part 10) that can read and edit the
+board through conversation (Part 9's `/api/ai/chat`).
 
 ## Stack
 
@@ -31,7 +32,20 @@ and `scripts/build-frontend.sh`. Gated behind a login screen (hardcoded
   the full `BoardData` the backend returns — no optimistic updates, no
   client-side reducer. Handles loading and error states (failed initial
   load shows a retry button; a failed mutation shows a dismissable-on-next-
-  success banner, see `MUTATION_ERROR_MESSAGE`)
+  success banner, see `MUTATION_ERROR_MESSAGE`). Renders `ChatSidebar`,
+  passing `setBoard` directly as `onBoardUpdate`
+- `src/components/ChatSidebar.tsx` — slide-in panel (fixed position,
+  toggled by a floating "AI Chat" button, closes on backdrop click) with a
+  message list, input, and send button. Owns its own conversation state
+  (`messages: ChatMessage[]`) — entirely client-side, never persisted; see
+  `app/ai.py`'s "Conversation history" note in `backend/AGENTS.md` for why.
+  Sends `{message, history}` (history = prior turns only, not the new
+  message) to `api.chat`; on success appends the reply and calls
+  `onBoardUpdate(result.board)` so the Kanban view refreshes immediately,
+  with no separate `GET /api/board` round trip. Shows a "Thinking…" bubble
+  while in flight and an inline error banner on failure. Each message div
+  carries `data-testid="chat-message-user"` / `"chat-message-assistant"`
+  for e2e targeting.
 - `src/components/KanbanColumn.tsx` — one column: renameable title input
   (local draft state, committed to `onRename` on blur/Enter rather than per
   keystroke — the rename is a real network request now, not a local state
@@ -49,8 +63,9 @@ and `scripts/build-frontend.sh`. Gated behind a login screen (hardcoded
 - `src/components/LoginScreen.tsx` — username/password form, calls
   `api.login`, shows an inline error on failure
 - `src/lib/api.ts` — thin fetch wrapper for auth (`login`, `logout`,
-  `getSession`) and board (`getBoard`, `renameColumn`, `addCard`,
-  `deleteCard`, `moveCard`) endpoints; throws on non-OK responses
+  `getSession`), board (`getBoard`, `renameColumn`, `addCard`,
+  `deleteCard`, `moveCard`), and `chat` (`POST /api/ai/chat`) endpoints;
+  throws on non-OK responses
 
 ## Data model
 
@@ -80,8 +95,12 @@ Run from `frontend/`:
 - `npm run test:e2e` — Playwright against a dev server it starts itself
   (`playwright.config.ts`), plus a backend it also starts (two `webServer`
   entries). Covers auth (login, wrong creds, logout, session survives
-  reload) and board interactions (load, add-card, drag-to-move, persistence
-  across reload/re-login). Needs `uv` on PATH.
+  reload), board interactions (load, add-card, drag-to-move, persistence
+  across reload/re-login), and the AI chat sidebar (`tests/ai-chat.spec.ts`
+  — a non-mutating question leaves the board unchanged, a mutating request
+  updates it live with no manual reload). The chat specs make **real**
+  Anthropic calls, same acceptance as the backend's live tests (see
+  `backend/AGENTS.md`) — needs `ANTHROPIC_API_KEY` set. Needs `uv` on PATH.
 - `npm run test:e2e:static` — same specs, but against the real static export
   served by the FastAPI backend (`playwright.static.config.ts`); runs
   `scripts/build-frontend.sh` and `uv run uvicorn` as its web server. This is
@@ -103,7 +122,6 @@ http://localhost:8000.
 
 ## Notes for future work
 
-- No AI chat yet — in scope for later plan parts.
 - Column IDs and card IDs are prefixed strings (`col-*`, `card-*`); keep this
   convention if the backend starts generating or validating IDs.
 - Static export means no Next.js server features (SSR, API routes, dynamic

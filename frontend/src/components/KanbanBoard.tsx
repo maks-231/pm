@@ -15,6 +15,7 @@ import {
 } from "@dnd-kit/core";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
+import { ChatSidebar } from "@/components/ChatSidebar";
 import { resolveDropTarget, type BoardData } from "@/lib/kanban";
 import * as api from "@/lib/api";
 
@@ -210,6 +211,8 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
           </DragOverlay>
         </DndContext>
       </main>
+
+      <ChatSidebar onBoardUpdate={setBoard} />
     </div>
   );
 };

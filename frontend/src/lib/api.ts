@@ -65,3 +65,16 @@ export const moveCard = (
     method: "PATCH",
     body: JSON.stringify({ column_id: columnId, index }),
   });
+
+export type ChatMessage = { role: "user" | "assistant"; content: string };
+
+export type ChatResult = { reply: string; board: BoardData };
+
+export const chat = (
+  message: string,
+  history: ChatMessage[]
+): Promise<ChatResult> =>
+  request("/api/ai/chat", {
+    method: "POST",
+    body: JSON.stringify({ message, history }),
+  });

@@ -22,7 +22,9 @@ describe("AuthGate", () => {
 
     render(<AuthGate />);
 
-    expect(await screen.findByText("Kanban Studio")).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Kanban Studio" })
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /log out/i })).toBeInTheDocument();
   });
 

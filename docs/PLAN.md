@@ -296,17 +296,17 @@ and board updates are persisted and consistent with Part 6's data model.
 **Goal:** A sidebar chat widget in the frontend using Part 9's API, with the
 Kanban board auto-refreshing when the AI updates it.
 
-- [ ] Sidebar component: message list, input box, send button, matching the
+- [x] Sidebar component: message list, input box, send button, matching the
       existing color scheme and visual style (Tailwind, brand colors from
       `globals.css`)
-- [ ] Sends `{ message, history }` to `POST /api/ai/chat`, appends the
+- [x] Sends `{ message, history }` to `POST /api/ai/chat`, appends the
       reply to the visible conversation, maintains history client-side (or
       fetches it, depending on the Part 9 persistence decision)
-- [ ] Loading/error states while waiting on the AI response
-- [ ] When the API response includes a board update, re-fetch
+- [x] Loading/error states while waiting on the AI response
+- [x] When the API response includes a board update, re-fetch
       `GET /api/board` (or apply the returned board directly) so the Kanban
       view updates without a manual page reload
-- [ ] Sidebar is collapsible/toggleable and doesn't obstruct the board on
+- [x] Sidebar is collapsible/toggleable and doesn't obstruct the board on
       smaller viewports
 
 **Tests:**

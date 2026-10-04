@@ -30,7 +30,7 @@ describe("KanbanBoard", () => {
     expect(screen.getByText(/loading your board/i)).toBeInTheDocument();
 
     resolveBoard(baseBoard);
-    expect(await screen.findByText("Backlog")).toBeInTheDocument();
+    expect(await screen.findByDisplayValue("Backlog")).toBeInTheDocument();
     expect(screen.getAllByTestId(/column-/i)).toHaveLength(2);
   });
 
@@ -46,7 +46,7 @@ describe("KanbanBoard", () => {
     ).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /try again/i }));
-    expect(await screen.findByText("Backlog")).toBeInTheDocument();
+    expect(await screen.findByDisplayValue("Backlog")).toBeInTheDocument();
   });
 
   it("renames a column on blur", async () => {

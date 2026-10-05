@@ -32,4 +32,42 @@ describe("LoginScreen", () => {
     );
     expect(onSuccess).not.toHaveBeenCalled();
   });
+
+  it("switches to signup mode and calls onSuccess after a successful signup", async () => {
+    vi.spyOn(api, "signup").mockResolvedValue({ username: "newuser" });
+    const onSuccess = vi.fn();
+    render(<LoginScreen onSuccess={onSuccess} />);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /need an account\? sign up/i })
+    );
+    await userEvent.type(screen.getByLabelText("Username"), "newuser");
+    await userEvent.type(screen.getByLabelText("Password"), "password123");
+    await userEvent.click(
+      screen.getByRole("button", { name: /create account/i })
+    );
+
+    expect(api.signup).toHaveBeenCalledWith("newuser", "password123");
+    expect(onSuccess).toHaveBeenCalledWith("newuser");
+  });
+
+  it("shows an error on a duplicate-username signup", async () => {
+    vi.spyOn(api, "signup").mockRejectedValue(new Error("conflict"));
+    const onSuccess = vi.fn();
+    render(<LoginScreen onSuccess={onSuccess} />);
+
+    await userEvent.click(
+      screen.getByRole("button", { name: /need an account\? sign up/i })
+    );
+    await userEvent.type(screen.getByLabelText("Username"), "user");
+    await userEvent.type(screen.getByLabelText("Password"), "password123");
+    await userEvent.click(
+      screen.getByRole("button", { name: /create account/i })
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /could not create that account/i
+    );
+    expect(onSuccess).not.toHaveBeenCalled();
+  });
 });

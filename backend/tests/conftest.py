@@ -19,3 +19,13 @@ def authed_client():
     )
     assert response.status_code == 200
     return client
+
+
+def signup_and_login(username: str, password: str = "password123") -> TestClient:
+    """Create a fresh user via /api/signup and return a client holding its session."""
+    client = TestClient(app)
+    response = client.post(
+        "/api/signup", json={"username": username, "password": password}
+    )
+    assert response.status_code == 200
+    return client

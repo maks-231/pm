@@ -1,10 +1,18 @@
-import hashlib
+import secrets
 import sqlite3
 from pathlib import Path
 
-from app.auth import HARDCODED_PASSWORD, HARDCODED_USERNAME
+from app.auth import HARDCODED_PASSWORD, HARDCODED_USERNAME, hash_password
 
 DB_PATH = Path(__file__).resolve().parent.parent / "data" / "app.db"
+
+DEFAULT_COLUMN_TITLES = [
+    "Backlog",
+    "Discovery",
+    "In Progress",
+    "Review",
+    "Done",
+]
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -137,7 +145,7 @@ def _seed(conn: sqlite3.Connection) -> None:
         "SELECT id FROM users WHERE username = ?", (HARDCODED_USERNAME,)
     ).fetchone()
     if user_row is None:
-        password_hash = hashlib.sha256(HARDCODED_PASSWORD.encode()).hexdigest()
+        password_hash = hash_password(HARDCODED_PASSWORD)
         cursor = conn.execute(
             "INSERT INTO users (username, password_hash) VALUES (?, ?)",
             (HARDCODED_USERNAME, password_hash),
@@ -169,3 +177,18 @@ def _seed(conn: sqlite3.Connection) -> None:
                 (card_id, column_id, card_title, details, card_position),
             )
     conn.commit()
+
+
+def create_user_board(conn: sqlite3.Connection, user_id: int) -> str:
+    """Create a fresh, empty board (default columns, no cards) for a new user."""
+    board_id = f"board-{user_id}"
+    conn.execute(
+        "INSERT INTO boards (id, user_id) VALUES (?, ?)", (board_id, user_id)
+    )
+    for position, title in enumerate(DEFAULT_COLUMN_TITLES):
+        column_id = f"col-{secrets.token_hex(6)}"
+        conn.execute(
+            "INSERT INTO columns (id, board_id, title, position) VALUES (?, ?, ?, ?)",
+            (column_id, board_id, title, position),
+        )
+    return board_id

@@ -8,15 +8,17 @@ from fastapi.staticfiles import StaticFiles
 from app.ai import router as ai_router
 from app.auth import (
     COOKIE_NAME,
-    HARDCODED_PASSWORD,
-    HARDCODED_USERNAME,
     LoginRequest,
     SessionResponse,
+    SignupRequest,
     create_session,
     end_session,
     get_current_username,
+    hash_password,
+    verify_password,
 )
 from app.board import router as board_router
+from app.db import create_user_board, get_connection
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
@@ -32,12 +34,51 @@ def hello() -> dict[str, str]:
     return {"message": "Hello from FastAPI"}
 
 
+@app.post("/api/signup", response_model=SessionResponse)
+def signup(credentials: SignupRequest, response: Response) -> SessionResponse:
+    conn = get_connection()
+    try:
+        existing = conn.execute(
+            "SELECT 1 FROM users WHERE username = ?", (credentials.username,)
+        ).fetchone()
+        if existing is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Username already taken",
+            )
+
+        cursor = conn.execute(
+            "INSERT INTO users (username, password_hash) VALUES (?, ?)",
+            (credentials.username, hash_password(credentials.password)),
+        )
+        user_id = cursor.lastrowid
+        create_user_board(conn, user_id)
+        conn.commit()
+    finally:
+        conn.close()
+
+    token = create_session(credentials.username)
+    response.set_cookie(
+        key=COOKIE_NAME,
+        value=token,
+        httponly=True,
+        samesite="lax",
+    )
+    return SessionResponse(username=credentials.username)
+
+
 @app.post("/api/login", response_model=SessionResponse)
 def login(credentials: LoginRequest, response: Response) -> SessionResponse:
-    if (
-        credentials.username != HARDCODED_USERNAME
-        or credentials.password != HARDCODED_PASSWORD
-    ):
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT password_hash FROM users WHERE username = ?",
+            (credentials.username,),
+        ).fetchone()
+    finally:
+        conn.close()
+
+    if row is None or not verify_password(credentials.password, row["password_hash"]):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password",

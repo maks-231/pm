@@ -29,6 +29,15 @@ export const login = (username: string, password: string): Promise<Session> =>
     body: JSON.stringify({ username, password }),
   });
 
+export const signup = (
+  username: string,
+  password: string
+): Promise<Session> =>
+  request("/api/signup", {
+    method: "POST",
+    body: JSON.stringify({ username, password }),
+  });
+
 export const logout = (): Promise<void> =>
   request("/api/logout", { method: "POST" });
 

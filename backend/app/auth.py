@@ -1,7 +1,9 @@
 import secrets
 
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError
 from fastapi import Cookie, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 HARDCODED_USERNAME = "user"
 HARDCODED_PASSWORD = "password"
@@ -11,10 +13,28 @@ COOKIE_NAME = "session_token"
 # locally. Sessions are lost on restart; the user just logs in again.
 _sessions: dict[str, str] = {}
 
+_password_hasher = PasswordHasher()
+
+
+def hash_password(password: str) -> str:
+    return _password_hasher.hash(password)
+
+
+def verify_password(password: str, password_hash: str) -> bool:
+    try:
+        return _password_hasher.verify(password_hash, password)
+    except VerifyMismatchError:
+        return False
+
 
 class LoginRequest(BaseModel):
     username: str
     password: str
+
+
+class SignupRequest(BaseModel):
+    username: str = Field(min_length=3, max_length=32)
+    password: str = Field(min_length=8, max_length=200)
 
 
 class SessionResponse(BaseModel):

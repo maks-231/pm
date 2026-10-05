@@ -321,3 +321,170 @@ Kanban board auto-refreshing when the AI updates it.
 modify the board autonomously based on the conversation, and the board
 reflects those changes immediately in the UI. Full project test suite
 (backend pytest, frontend Vitest, Playwright e2e) green end to end.
+
+---
+
+# Phase 2: Multi-user, multi-board expansion
+
+Parts 11-16 below grow the MVP (Parts 1-10) into a more comprehensive PM
+app: real self-service accounts, multiple boards per user, richer cards,
+comments, search/filter, and a matching AI tool-schema extension. Full
+design rationale and the trade-offs baked into this phase are in
+`/home/maks/.claude/plans/drifting-wondering-heron.md` (the approved plan);
+this section is the checklist/success-criteria summary in the same format
+as Phase 1.
+
+---
+
+## Part 11: Real multi-user auth (signup + password hashing)
+
+**Goal:** Self-service signup with real password hashing. The hardcoded
+in-memory credential check in `main.py`'s `login` is retired in favor of a
+DB lookup; `user`/`password` keeps working as one ordinary seeded account.
+Still exactly one board per user — independently shippable before Part 12.
+
+- [ ] Add `argon2-cffi` to `backend/pyproject.toml`
+- [ ] `backend/app/auth.py`: `hash_password`/`verify_password` wrapping
+      `argon2.PasswordHasher`
+- [ ] `backend/app/db.py`: `_seed()` hashes the seeded password with
+      `hash_password` instead of raw SHA-256
+- [ ] `POST /api/signup` (username/password validation, 409 on duplicate,
+      creates user + one default board, creates session)
+- [ ] Rewrite `POST /api/login` to check the DB via `verify_password`
+      instead of the hardcoded constants
+- [ ] Frontend: `api.signup`, `LoginScreen` gains a login/signup mode toggle
+
+**Tests:**
+- Backend: signup success, duplicate username 409, short password 422,
+  login against a fresh signup, seeded `user` account still logs in
+- Frontend: signup toggle/submit/duplicate-username error path (Vitest)
+- E2E: sign up → empty board → logout → login → same board
+
+**Success criteria:** new user signs up and reaches an empty board; logout/
+login round-trips; `user`/`password` still works; no plaintext/unsalted
+hash written anywhere; full suite green.
+
+---
+
+## Part 12: Multi-board plumbing (schema, routing, board CRUD, switcher UI)
+
+**Goal:** Users can have more than one board; every board route is
+explicitly board-scoped; a board picker/switcher exists in the UI.
+
+- [ ] `db.py`: guard-function migration dropping `boards.user_id UNIQUE` and
+      adding `boards.name`
+- [ ] Update `docs/schema.json` and `docs/DATABASE.md` for the new column,
+      the dropped constraint, and the migration approach
+- [ ] `board.py`: replace `board_id_for`/`get_board_id` with
+      `user_owns_board`/`require_board`; board CRUD DB functions
+      (`list_boards_db`, `create_board_db`, `rename_board_db`,
+      `delete_board_db`)
+- [ ] Routes move under `/api/boards`, including board list/create/rename/
+      delete and `GET /api/boards/{board_id}` replacing `GET /api/board`
+- [ ] `ai.py`: `POST /api/boards/{board_id}/ai/chat` replacing
+      `POST /api/ai/chat`
+- [ ] Frontend: `api.ts` functions gain a leading `boardId`; new
+      `BoardSwitcher.tsx`; board-selection wrapper (extends `AuthGate.tsx`
+      or a new `BoardShell.tsx`) picks/remembers the active board
+      (`localStorage`); `KanbanBoard`/`ChatSidebar` take a `boardId` prop
+
+**Tests:**
+- Backend: board list/create/rename/delete, cross-user 404 isolation,
+  deleting the last board leaves an empty list; existing board/AI tests
+  updated for the new URLs and `boardId` plumbing
+- Frontend: `BoardSwitcher.test.tsx`; existing component tests updated for
+  the new `boardId` argument on every mocked `api.*` call
+- E2E: create a second board, switch, confirm isolation, delete one,
+  confirm fallback
+
+**Success criteria:** create/rename/delete/switch boards; board data fully
+isolated per board and per user (cross-user 404 proven); AI chat only
+touches the currently open board; full suite green.
+
+---
+
+## Part 13: Card metadata (due date, labels, assignee) + detail panel
+
+**Goal:** Cards carry a due date, assignee text, and reusable board-scoped
+labels; a detail panel edits all of it plus title/details (not editable
+today).
+
+- [ ] `db.py`: additive `cards.due_date`/`cards.assignee_text` columns, new
+      `labels`/`card_labels` tables
+- [ ] `board.py`: `Card` model extended; `update_card_db`, `set_labels_db`,
+      `list_labels_db`; routes for card update, set-labels, list-labels
+- [ ] Frontend: `Card` type extended; new `CardDetailPanel.tsx` (editable
+      title/details, due date, assignee, label chip editor); `KanbanCard.tsx`
+      gets an "open details" button and inline badges
+
+**Tests:**
+- Backend: per-field update, clear-via-empty-string, label reuse + color
+  cycling, cross-board 404s
+- Frontend: `CardDetailPanel.test.tsx`, `KanbanCard.test.tsx` badge updates
+- E2E: set due date/assignee/labels, reload, confirm persistence
+
+**Success criteria:** every metadata field round-trips through a reload;
+labels are reused (not duplicated) per board; title/details are editable
+post-creation.
+
+---
+
+## Part 14: Comments
+
+**Goal:** A per-card comment thread, author-attributed and timestamped.
+
+- [ ] `db.py`: additive `comments` table
+- [ ] `board.py`: `Card.commentCount`, `add_comment_db`, `list_comments_db`,
+      comment routes
+- [ ] Frontend: `api.listComments`/`addComment`; comment thread section in
+      `CardDetailPanel.tsx`
+
+**Tests:**
+- Backend: add/list, author attribution, cross-board 404, empty-body
+  validation
+- Frontend: `CardDetailPanel.test.tsx` extended
+- E2E: add a comment, reopen, confirm persisted
+
+**Success criteria:** comments persist, are attributed to the real
+logged-in user, and are isolated per card/board.
+
+---
+
+## Part 15: Search/filter bar (client-side only)
+
+**Goal:** Filter the currently open board by text, label, assignee, and due
+date — no backend change.
+
+- [ ] `kanban.ts`: `FilterState` type and pure `filterBoard` function
+- [ ] New `FilterBar.tsx` wired into `KanbanBoard.tsx`'s header; filtering
+      affects only what's displayed, never the real board state used for
+      mutations
+
+**Tests:**
+- `filterBoard` unit tests (each filter, combinations, empty passthrough)
+- Frontend: `FilterBar.test.tsx`, `KanbanBoard.test.tsx` extended to confirm
+  filtering never affects mutation payloads
+
+**Success criteria:** filtering is instant, no network call, never mutates
+server state, and filters compose with AND.
+
+---
+
+## Part 16: AI tool-schema extension for metadata ops
+
+**Goal:** The AI can set due date, labels, and assignee on cards within the
+currently open board — and only that; comments and board CRUD remain
+human-only.
+
+- [ ] `ai.py`: `SYSTEM_PROMPT` and `RESPOND_TOOL` schema extended with
+      `set_due_date`/`set_labels`/`set_assignee`; `Operation` model and
+      `_apply_operation` updated to match
+
+**Tests:**
+- Backend: `test_ai_chat.py` extended with fixture payloads per new op type
+  and a combined-ops case; existing live smoke test unchanged
+
+**Success criteria:** the AI can set due date/labels/assignee via chat,
+changes persist and appear in the returned board; the AI never attempts a
+comment or board-CRUD operation; full project test suite (backend pytest,
+frontend Vitest, Playwright e2e) green end to end.

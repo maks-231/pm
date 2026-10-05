@@ -3,19 +3,23 @@
 ## Business Requirements
 
 This project is building a Project Management App. Key features:
-- A user can sign in
-- When signed in, the user sees a Kanban board representing their project
-- The Kanban board has fixed columns that can be renamed
-- The cards on the Kanban board can be moved with drag and drop, and edited
-- There is an AI chat feature in a sidebar; the AI is able to create / edit / move one or more cards
+- A user can sign up for their own account and sign in
+- A signed-in user can have multiple Kanban boards, and switch between them
+- Each Kanban board has fixed columns that can be renamed
+- Cards can be moved with drag and drop, and edited (title, details, due date, labels, assignee)
+- Cards support a comment thread
+- A board can be searched/filtered by text, label, assignee, and due date
+- There is an AI chat feature in a sidebar, scoped to whichever board is currently open; the AI can create / edit / move cards and set due date, labels, and assignee
 
 ## Limitations
 
-For the MVP, there will only be a user sign in (hardcoded to 'user' and 'password') but the database will support multiple users for future.
+Self-service signup with hashed passwords (no email verification, no password reset — out of scope for now).
 
-For the MVP, there will only be 1 Kanban board per signed in user.
+Boards are not shared/collaborative: each board belongs to exactly one user, with no concept of inviting other accounts. "Assignee" is a free-text field, not a link to another account.
 
-For the MVP, this will run locally (in a docker container)
+No activity log / audit trail beyond card comments.
+
+This runs locally (in a docker container).
 
 ## Technical Decisions
 

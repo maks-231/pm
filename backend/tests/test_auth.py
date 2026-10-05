@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 
+from app import auth
 from app.main import app
 
 
@@ -99,6 +100,34 @@ def test_signup_with_short_password_is_rejected():
     )
 
     assert response.status_code == 422
+
+
+def test_verify_password_rejects_a_hash_that_isnt_valid_argon2():
+    """A row seeded by an older version of this app (e.g. a raw SHA-256
+    hex digest, pre-Part-11) must fail verification cleanly rather than
+    raising argon2.exceptions.InvalidHashError."""
+    old_style_hash = "5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d"
+
+    assert auth.verify_password("password", old_style_hash) is False
+
+
+def test_login_with_unreadable_hash_is_a_clean_401():
+    from app import db
+
+    conn = db.get_connection()
+    conn.execute(
+        "UPDATE users SET password_hash = ? WHERE username = 'user'",
+        ("not-a-valid-argon2-hash",),
+    )
+    conn.commit()
+    conn.close()
+
+    client = TestClient(app)
+    response = client.post(
+        "/api/login", json={"username": "user", "password": "password"}
+    )
+
+    assert response.status_code == 401
 
 
 def test_login_after_signup():

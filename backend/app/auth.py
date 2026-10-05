@@ -1,7 +1,7 @@
 import secrets
 
 from argon2 import PasswordHasher
-from argon2.exceptions import VerifyMismatchError
+from argon2.exceptions import Argon2Error
 from fastapi import Cookie, HTTPException, status
 from pydantic import BaseModel, Field
 
@@ -23,7 +23,13 @@ def hash_password(password: str) -> str:
 def verify_password(password: str, password_hash: str) -> bool:
     try:
         return _password_hasher.verify(password_hash, password)
-    except VerifyMismatchError:
+    except (Argon2Error, ValueError):
+        # Argon2Error covers a wrong password (VerifyMismatchError).
+        # InvalidHashError — raised when the hash isn't valid Argon2 at
+        # all, e.g. a row seeded by an older version of this app before
+        # Part 11's hashing change — is a ValueError, not an Argon2Error.
+        # Either way, the credentials don't verify; this must not be an
+        # unhandled 500.
         return False
 
 

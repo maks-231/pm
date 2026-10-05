@@ -70,4 +70,17 @@ describe("LoginScreen", () => {
     );
     expect(onSuccess).not.toHaveBeenCalled();
   });
+
+  it("toggles password visibility", async () => {
+    render(<LoginScreen onSuccess={() => {}} />);
+
+    const passwordInput = screen.getByLabelText("Password");
+    expect(passwordInput).toHaveAttribute("type", "password");
+
+    await userEvent.click(screen.getByRole("button", { name: /show password/i }));
+    expect(passwordInput).toHaveAttribute("type", "text");
+
+    await userEvent.click(screen.getByRole("button", { name: /hide password/i }));
+    expect(passwordInput).toHaveAttribute("type", "password");
+  });
 });

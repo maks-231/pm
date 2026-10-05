@@ -343,16 +343,16 @@ in-memory credential check in `main.py`'s `login` is retired in favor of a
 DB lookup; `user`/`password` keeps working as one ordinary seeded account.
 Still exactly one board per user — independently shippable before Part 12.
 
-- [ ] Add `argon2-cffi` to `backend/pyproject.toml`
-- [ ] `backend/app/auth.py`: `hash_password`/`verify_password` wrapping
+- [x] Add `argon2-cffi` to `backend/pyproject.toml`
+- [x] `backend/app/auth.py`: `hash_password`/`verify_password` wrapping
       `argon2.PasswordHasher`
-- [ ] `backend/app/db.py`: `_seed()` hashes the seeded password with
+- [x] `backend/app/db.py`: `_seed()` hashes the seeded password with
       `hash_password` instead of raw SHA-256
-- [ ] `POST /api/signup` (username/password validation, 409 on duplicate,
+- [x] `POST /api/signup` (username/password validation, 409 on duplicate,
       creates user + one default board, creates session)
-- [ ] Rewrite `POST /api/login` to check the DB via `verify_password`
+- [x] Rewrite `POST /api/login` to check the DB via `verify_password`
       instead of the hardcoded constants
-- [ ] Frontend: `api.signup`, `LoginScreen` gains a login/signup mode toggle
+- [x] Frontend: `api.signup`, `LoginScreen` gains a login/signup mode toggle
 
 **Tests:**
 - Backend: signup success, duplicate username 409, short password 422,
@@ -371,19 +371,19 @@ hash written anywhere; full suite green.
 **Goal:** Users can have more than one board; every board route is
 explicitly board-scoped; a board picker/switcher exists in the UI.
 
-- [ ] `db.py`: guard-function migration dropping `boards.user_id UNIQUE` and
+- [x] `db.py`: guard-function migration dropping `boards.user_id UNIQUE` and
       adding `boards.name`
-- [ ] Update `docs/schema.json` and `docs/DATABASE.md` for the new column,
+- [x] Update `docs/schema.json` and `docs/DATABASE.md` for the new column,
       the dropped constraint, and the migration approach
-- [ ] `board.py`: replace `board_id_for`/`get_board_id` with
+- [x] `board.py`: replace `board_id_for`/`get_board_id` with
       `user_owns_board`/`require_board`; board CRUD DB functions
       (`list_boards_db`, `create_board_db`, `rename_board_db`,
       `delete_board_db`)
-- [ ] Routes move under `/api/boards`, including board list/create/rename/
+- [x] Routes move under `/api/boards`, including board list/create/rename/
       delete and `GET /api/boards/{board_id}` replacing `GET /api/board`
-- [ ] `ai.py`: `POST /api/boards/{board_id}/ai/chat` replacing
+- [x] `ai.py`: `POST /api/boards/{board_id}/ai/chat` replacing
       `POST /api/ai/chat`
-- [ ] Frontend: `api.ts` functions gain a leading `boardId`; new
+- [x] Frontend: `api.ts` functions gain a leading `boardId`; new
       `BoardSwitcher.tsx`; board-selection wrapper (extends `AuthGate.tsx`
       or a new `BoardShell.tsx`) picks/remembers the active board
       (`localStorage`); `KanbanBoard`/`ChatSidebar` take a `boardId` prop
@@ -409,11 +409,11 @@ touches the currently open board; full suite green.
 labels; a detail panel edits all of it plus title/details (not editable
 today).
 
-- [ ] `db.py`: additive `cards.due_date`/`cards.assignee_text` columns, new
+- [x] `db.py`: additive `cards.due_date`/`cards.assignee_text` columns, new
       `labels`/`card_labels` tables
-- [ ] `board.py`: `Card` model extended; `update_card_db`, `set_labels_db`,
+- [x] `board.py`: `Card` model extended; `update_card_db`, `set_labels_db`,
       `list_labels_db`; routes for card update, set-labels, list-labels
-- [ ] Frontend: `Card` type extended; new `CardDetailPanel.tsx` (editable
+- [x] Frontend: `Card` type extended; new `CardDetailPanel.tsx` (editable
       title/details, due date, assignee, label chip editor); `KanbanCard.tsx`
       gets an "open details" button and inline badges
 
@@ -433,10 +433,10 @@ post-creation.
 
 **Goal:** A per-card comment thread, author-attributed and timestamped.
 
-- [ ] `db.py`: additive `comments` table
-- [ ] `board.py`: `Card.commentCount`, `add_comment_db`, `list_comments_db`,
+- [x] `db.py`: additive `comments` table
+- [x] `board.py`: `Card.commentCount`, `add_comment_db`, `list_comments_db`,
       comment routes
-- [ ] Frontend: `api.listComments`/`addComment`; comment thread section in
+- [x] Frontend: `api.listComments`/`addComment`; comment thread section in
       `CardDetailPanel.tsx`
 
 **Tests:**
@@ -455,8 +455,8 @@ logged-in user, and are isolated per card/board.
 **Goal:** Filter the currently open board by text, label, assignee, and due
 date — no backend change.
 
-- [ ] `kanban.ts`: `FilterState` type and pure `filterBoard` function
-- [ ] New `FilterBar.tsx` wired into `KanbanBoard.tsx`'s header; filtering
+- [x] `kanban.ts`: `FilterState` type and pure `filterBoard` function
+- [x] New `FilterBar.tsx` wired into `KanbanBoard.tsx`'s header; filtering
       affects only what's displayed, never the real board state used for
       mutations
 
@@ -476,7 +476,7 @@ server state, and filters compose with AND.
 currently open board — and only that; comments and board CRUD remain
 human-only.
 
-- [ ] `ai.py`: `SYSTEM_PROMPT` and `RESPOND_TOOL` schema extended with
+- [x] `ai.py`: `SYSTEM_PROMPT` and `RESPOND_TOOL` schema extended with
       `set_due_date`/`set_labels`/`set_assignee`; `Operation` model and
       `_apply_operation` updated to match
 

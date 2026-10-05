@@ -18,7 +18,15 @@ import { KanbanCardPreview } from "@/components/KanbanCardPreview";
 import { ChatSidebar } from "@/components/ChatSidebar";
 import { BoardSwitcher } from "@/components/BoardSwitcher";
 import { CardDetailPanel } from "@/components/CardDetailPanel";
-import { resolveDropTarget, type BoardData, type Label } from "@/lib/kanban";
+import { FilterBar } from "@/components/FilterBar";
+import {
+  EMPTY_FILTER,
+  filterBoard,
+  resolveDropTarget,
+  type BoardData,
+  type FilterState,
+  type Label,
+} from "@/lib/kanban";
 import type { BoardSummary, UpdateCardFields } from "@/lib/api";
 import * as api from "@/lib/api";
 
@@ -59,6 +67,7 @@ export const KanbanBoard = ({
   const [mutationError, setMutationError] = useState(false);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [openCardId, setOpenCardId] = useState<string | null>(null);
+  const [filters, setFilters] = useState<FilterState>(EMPTY_FILTER);
 
   const loadBoard = () => {
     setLoadError(false);
@@ -185,6 +194,8 @@ export const KanbanBoard = ({
     );
   }
 
+  const displayBoard = filterBoard(board, filters);
+
   return (
     <div className="relative overflow-hidden">
       <div className="pointer-events-none absolute left-0 top-0 h-[420px] w-[420px] -translate-x-1/3 -translate-y-1/3 rounded-full bg-[radial-gradient(circle,_rgba(32,157,215,0.25)_0%,_rgba(32,157,215,0.05)_55%,_transparent_70%)]" />
@@ -227,6 +238,13 @@ export const KanbanBoard = ({
               Log out
             </button>
           </div>
+          <div className="w-full">
+            <FilterBar
+              filters={filters}
+              availableLabels={availableLabels}
+              onChange={setFilters}
+            />
+          </div>
           {mutationError && (
             <p role="alert" className="w-full text-sm font-medium text-red-600">
               {MUTATION_ERROR_MESSAGE}
@@ -241,7 +259,7 @@ export const KanbanBoard = ({
           onDragEnd={handleDragEnd}
         >
           <section className="grid flex-1 gap-6 [grid-template-columns:repeat(auto-fit,minmax(260px,1fr))]">
-            {board.columns.map((column) => (
+            {displayBoard.columns.map((column) => (
               <KanbanColumn
                 key={column.id}
                 column={column}

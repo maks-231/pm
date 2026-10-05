@@ -115,6 +115,7 @@ export const CardDetailPanel = ({
       onClick={onClose}
     >
       <div
+        data-testid="card-detail-panel"
         className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-[32px] border border-[var(--stroke)] bg-white p-8 shadow-[var(--shadow)]"
         onClick={(event) => event.stopPropagation()}
       >

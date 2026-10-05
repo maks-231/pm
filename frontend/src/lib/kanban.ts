@@ -63,3 +63,72 @@ export const resolveDropTarget = (
   const index = cardIds.indexOf(overId);
   return { columnId: overColumn.id, index: index === -1 ? cardIds.length : index };
 };
+
+export type FilterState = {
+  text: string;
+  labelIds: string[];
+  assigneeText: string;
+  dueBefore: string | null;
+  dueAfter: string | null;
+};
+
+export const EMPTY_FILTER: FilterState = {
+  text: "",
+  labelIds: [],
+  assigneeText: "",
+  dueBefore: null,
+  dueAfter: null,
+};
+
+export const isFilterEmpty = (filters: FilterState): boolean =>
+  !filters.text &&
+  filters.labelIds.length === 0 &&
+  !filters.assigneeText &&
+  !filters.dueBefore &&
+  !filters.dueAfter;
+
+const cardMatchesFilter = (card: Card, filters: FilterState): boolean => {
+  if (filters.text) {
+    const haystack = `${card.title} ${card.details}`.toLowerCase();
+    if (!haystack.includes(filters.text.toLowerCase())) {
+      return false;
+    }
+  }
+  if (filters.labelIds.length > 0) {
+    const cardLabelIds = new Set(card.labels.map((label) => label.id));
+    if (!filters.labelIds.some((id) => cardLabelIds.has(id))) {
+      return false;
+    }
+  }
+  if (filters.assigneeText) {
+    const assignee = (card.assigneeText ?? "").toLowerCase();
+    if (!assignee.includes(filters.assigneeText.toLowerCase())) {
+      return false;
+    }
+  }
+  if (filters.dueBefore && (!card.dueDate || card.dueDate > filters.dueBefore)) {
+    return false;
+  }
+  if (filters.dueAfter && (!card.dueDate || card.dueDate < filters.dueAfter)) {
+    return false;
+  }
+  return true;
+};
+
+// Client-side only: narrows each column's cardIds to matches, AND-ing every
+// active filter. `cards` passes through unchanged so callers that need the
+// real, unfiltered board (drag-and-drop, mutations) keep working from it.
+export const filterBoard = (board: BoardData, filters: FilterState): BoardData => {
+  if (isFilterEmpty(filters)) {
+    return board;
+  }
+  return {
+    cards: board.cards,
+    columns: board.columns.map((column) => ({
+      ...column,
+      cardIds: column.cardIds.filter((id) =>
+        cardMatchesFilter(board.cards[id], filters)
+      ),
+    })),
+  };
+};

@@ -137,6 +137,55 @@ describe("KanbanBoard", () => {
     );
   });
 
+  it("filters visible cards by search text without affecting mutation payloads", async () => {
+    const twoCardBoard: BoardData = {
+      columns: [{ id: "col-a", title: "Backlog", cardIds: ["card-1", "card-2"] }],
+      cards: {
+        "card-1": {
+          id: "card-1",
+          title: "Fix login bug",
+          details: "",
+          dueDate: null,
+          assigneeText: null,
+          labels: [],
+          commentCount: 0,
+        },
+        "card-2": {
+          id: "card-2",
+          title: "Write docs",
+          details: "",
+          dueDate: null,
+          assigneeText: null,
+          labels: [],
+          commentCount: 0,
+        },
+      },
+    };
+    vi.spyOn(api, "getBoard").mockResolvedValue(twoCardBoard);
+    const renamed = {
+      ...twoCardBoard,
+      columns: [{ ...twoCardBoard.columns[0], title: "Triage" }],
+    };
+    vi.spyOn(api, "renameColumn").mockResolvedValue(renamed);
+
+    render(<KanbanBoard {...defaultProps} />);
+    await screen.findByText("Fix login bug");
+    expect(screen.getByText("Write docs")).toBeInTheDocument();
+
+    await userEvent.type(screen.getByLabelText("Search cards"), "login");
+
+    expect(screen.getByText("Fix login bug")).toBeInTheDocument();
+    expect(screen.queryByText("Write docs")).not.toBeInTheDocument();
+
+    const column = screen.getByTestId("column-col-a");
+    const input = within(column).getByLabelText("Column title");
+    await userEvent.clear(input);
+    await userEvent.type(input, "Triage");
+    await userEvent.tab();
+
+    expect(api.renameColumn).toHaveBeenCalledWith("board-1", "col-a", "Triage");
+  });
+
   it("shows a mutation error banner when a request fails", async () => {
     vi.spyOn(api, "getBoard").mockResolvedValue(baseBoard);
     vi.spyOn(api, "renameColumn").mockRejectedValue(new Error("boom"));

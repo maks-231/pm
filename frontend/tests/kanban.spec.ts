@@ -109,15 +109,16 @@ test("sets a card's due date, assignee, and labels, and they persist across relo
 }) => {
   await page.goto("/");
   await page.getByText("Align roadmap themes").click();
+  const panel = page.getByTestId("card-detail-panel");
 
-  await page.getByLabel("Due date").fill("2026-11-01");
-  await page.getByLabel("Assignee").fill("Alex");
-  await page.getByLabel("Assignee").blur();
-  await page.getByLabel("New label").fill("Urgent");
-  await page.getByLabel("New label").press("Enter");
+  await panel.getByLabel("Due date").fill("2026-11-01");
+  await panel.getByLabel("Assignee").fill("Alex");
+  await panel.getByLabel("Assignee").blur();
+  await panel.getByLabel("New label").fill("Urgent");
+  await panel.getByLabel("New label").press("Enter");
 
-  await expect(page.getByRole("button", { name: /urgent ×/i })).toBeVisible();
-  await page.getByRole("button", { name: "Close card details" }).click();
+  await expect(panel.getByRole("button", { name: /urgent ×/i })).toBeVisible();
+  await panel.getByRole("button", { name: "Close card details" }).click();
 
   const card = page.getByTestId("card-card-1");
   await expect(card.getByText("2026-11-01")).toBeVisible();

@@ -179,6 +179,128 @@ def test_chat_includes_history_in_the_model_request(
     assert "Current board state" in sent_messages[2]["content"]
 
 
+def test_chat_sets_due_date(authed_client, board_id, monkeypatch):
+    install_fake_ai(
+        monkeypatch,
+        [
+            tool_response(
+                "Set it.",
+                [
+                    {
+                        "type": "set_due_date",
+                        "card_id": "card-1",
+                        "due_date": "2026-11-01",
+                    }
+                ],
+            )
+        ],
+    )
+
+    response = authed_client.post(
+        f"/api/boards/{board_id}/ai/chat",
+        json={"message": "set card-1's due date to 2026-11-01", "history": []},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["board"]["cards"]["card-1"]["dueDate"] == "2026-11-01"
+
+
+def test_chat_sets_labels(authed_client, board_id, monkeypatch):
+    install_fake_ai(
+        monkeypatch,
+        [
+            tool_response(
+                "Labeled.",
+                [
+                    {
+                        "type": "set_labels",
+                        "card_id": "card-1",
+                        "labels": ["Urgent", "Bug"],
+                    }
+                ],
+            )
+        ],
+    )
+
+    response = authed_client.post(
+        f"/api/boards/{board_id}/ai/chat",
+        json={"message": "label card-1 Urgent and Bug", "history": []},
+    )
+
+    assert response.status_code == 200
+    label_names = {
+        label["name"] for label in response.json()["board"]["cards"]["card-1"]["labels"]
+    }
+    assert label_names == {"Urgent", "Bug"}
+
+
+def test_chat_sets_assignee(authed_client, board_id, monkeypatch):
+    install_fake_ai(
+        monkeypatch,
+        [
+            tool_response(
+                "Assigned.",
+                [
+                    {
+                        "type": "set_assignee",
+                        "card_id": "card-1",
+                        "assignee": "Alex",
+                    }
+                ],
+            )
+        ],
+    )
+
+    response = authed_client.post(
+        f"/api/boards/{board_id}/ai/chat",
+        json={"message": "assign card-1 to Alex", "history": []},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["board"]["cards"]["card-1"]["assigneeText"] == "Alex"
+
+
+def test_chat_combined_metadata_ops(authed_client, board_id, monkeypatch):
+    install_fake_ai(
+        monkeypatch,
+        [
+            tool_response(
+                "Done.",
+                [
+                    {
+                        "type": "set_due_date",
+                        "card_id": "card-1",
+                        "due_date": "2026-12-01",
+                    },
+                    {
+                        "type": "set_assignee",
+                        "card_id": "card-1",
+                        "assignee": "Sam",
+                    },
+                    {
+                        "type": "set_labels",
+                        "card_id": "card-2",
+                        "labels": ["Urgent"],
+                    },
+                ],
+            )
+        ],
+    )
+
+    response = authed_client.post(
+        f"/api/boards/{board_id}/ai/chat",
+        json={"message": "do a few things", "history": []},
+    )
+
+    assert response.status_code == 200
+    board = response.json()["board"]
+    assert board["cards"]["card-1"]["dueDate"] == "2026-12-01"
+    assert board["cards"]["card-1"]["assigneeText"] == "Sam"
+    assert [label["name"] for label in board["cards"]["card-2"]["labels"]] == [
+        "Urgent"
+    ]
+
+
 def test_chat_live_smoke(authed_client, board_id):
     """Real call to the Anthropic API, matching docs/PLAN.md Part 9's
     acceptance of a live smoke test alongside the mocked cases above."""

@@ -15,6 +15,8 @@ from app.board import (
     rename_column_db,
     require_board,
     serialize_board,
+    set_labels_db,
+    update_card_db,
 )
 from app.db import get_connection
 
@@ -69,9 +71,9 @@ You can chat with the user about their board and, when it's appropriate, \
 propose changes to it.
 
 The board is organized as columns (each with an id, a title, and an \
-ordered list of card ids) and cards (each with an id, a title, and a \
-details text). You will be given the current board as JSON before every \
-user message.
+ordered list of card ids) and cards (each with an id, a title, a details \
+text, an optional due date, an optional assignee, and a list of labels). \
+You will be given the current board as JSON before every user message.
 
 You must always respond by calling the `respond` tool. Set `operations` \
 to an empty list if the user's message doesn't call for a board change.
@@ -82,6 +84,18 @@ Available operation types:
 - delete_card: requires card_id
 - move_card: requires card_id, column_id (the target column), index \
 (0-based position within that column's cards after the move)
+- set_due_date: requires card_id, due_date (an ISO 'YYYY-MM-DD' string, or \
+an empty string to clear it)
+- set_labels: requires card_id, labels (the card's full new list of label \
+name strings — this replaces the card's existing labels, it does not add \
+to them; pass the card's current label names plus your addition to add \
+one, or omit a name to remove it)
+- set_assignee: requires card_id, assignee (a plain name/string, or an \
+empty string to clear it)
+
+Comments and creating/renaming/deleting boards are not available \
+operations — you can only read and discuss them in your reply, never act \
+on them.
 
 Only reference column_id/card_id values that actually appear in the board \
 JSON you were given. If a request is ambiguous or refers to something \
@@ -117,6 +131,9 @@ RESPOND_TOOL = {
                                 "add_card",
                                 "delete_card",
                                 "move_card",
+                                "set_due_date",
+                                "set_labels",
+                                "set_assignee",
                             ],
                         },
                         "column_id": {"type": "string"},
@@ -124,6 +141,9 @@ RESPOND_TOOL = {
                         "title": {"type": "string"},
                         "details": {"type": "string"},
                         "index": {"type": "integer"},
+                        "due_date": {"type": "string"},
+                        "labels": {"type": "array", "items": {"type": "string"}},
+                        "assignee": {"type": "string"},
                     },
                     "required": ["type"],
                 },
@@ -150,12 +170,23 @@ class ChatResponse(BaseModel):
 
 
 class Operation(BaseModel):
-    type: Literal["rename_column", "add_card", "delete_card", "move_card"]
+    type: Literal[
+        "rename_column",
+        "add_card",
+        "delete_card",
+        "move_card",
+        "set_due_date",
+        "set_labels",
+        "set_assignee",
+    ]
     column_id: str | None = None
     card_id: str | None = None
     title: str | None = None
     details: str | None = None
     index: int | None = None
+    due_date: str | None = None
+    labels: list[str] | None = None
+    assignee: str | None = None
 
 
 class StructuredReply(BaseModel):
@@ -252,6 +283,17 @@ def _apply_operation(conn, board_id: str, op: Operation) -> None:
     elif op.type == "move_card":
         if op.card_id and op.column_id and op.index is not None:
             move_card_db(conn, board_id, op.card_id, op.column_id, op.index)
+    elif op.type == "set_due_date":
+        if op.card_id and op.due_date is not None:
+            update_card_db(conn, board_id, op.card_id, {"due_date": op.due_date})
+    elif op.type == "set_labels":
+        if op.card_id and op.labels is not None:
+            set_labels_db(conn, board_id, op.card_id, op.labels)
+    elif op.type == "set_assignee":
+        if op.card_id and op.assignee is not None:
+            update_card_db(
+                conn, board_id, op.card_id, {"assignee_text": op.assignee}
+            )
 
 
 @router.post("/api/boards/{board_id}/ai/chat", response_model=ChatResponse)

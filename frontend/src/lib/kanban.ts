@@ -1,7 +1,16 @@
+export type Label = {
+  id: string;
+  name: string;
+  color: string;
+};
+
 export type Card = {
   id: string;
   title: string;
   details: string;
+  dueDate: string | null;
+  assigneeText: string | null;
+  labels: Label[];
 };
 
 export type Column = {

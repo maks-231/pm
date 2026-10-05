@@ -104,6 +104,38 @@ export const moveCard = (
     body: JSON.stringify({ column_id: columnId, index }),
   });
 
+export type UpdateCardFields = Partial<{
+  title: string;
+  details: string;
+  due_date: string;
+  assignee_text: string;
+}>;
+
+export const updateCard = (
+  boardId: string,
+  cardId: string,
+  fields: UpdateCardFields
+): Promise<BoardData> =>
+  request(`/api/boards/${boardId}/cards/${cardId}`, {
+    method: "PATCH",
+    body: JSON.stringify(fields),
+  });
+
+export const setCardLabels = (
+  boardId: string,
+  cardId: string,
+  labelNames: string[]
+): Promise<BoardData> =>
+  request(`/api/boards/${boardId}/cards/${cardId}/labels`, {
+    method: "PUT",
+    body: JSON.stringify({ label_names: labelNames }),
+  });
+
+export type LabelSummary = { id: string; name: string; color: string };
+
+export const listLabels = (boardId: string): Promise<LabelSummary[]> =>
+  request(`/api/boards/${boardId}/labels`);
+
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 
 export type ChatResult = { reply: string; board: BoardData };

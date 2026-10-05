@@ -18,11 +18,26 @@ DEFAULT_COLUMN_TITLES = [
     "Done",
 ]
 
+# Brand colors from AGENTS.md, cycled by creation order for new labels.
+LABEL_COLORS = ["#ecad0a", "#209dd7", "#753991", "#032147", "#888888"]
+
+UPDATABLE_CARD_FIELDS = {"title", "details", "due_date", "assignee_text"}
+NULLABLE_CARD_FIELDS = {"due_date", "assignee_text"}
+
+
+class Label(BaseModel):
+    id: str
+    name: str
+    color: str
+
 
 class Card(BaseModel):
     id: str
     title: str
     details: str
+    dueDate: str | None = None
+    assigneeText: str | None = None
+    labels: list[Label] = Field(default_factory=list)
 
 
 class Column(BaseModel):
@@ -61,6 +76,17 @@ class AddCardRequest(BaseModel):
 class MoveCardRequest(BaseModel):
     column_id: str
     index: int = Field(ge=0)
+
+
+class UpdateCardRequest(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    details: str | None = Field(default=None, max_length=2000)
+    due_date: str | None = None
+    assignee_text: str | None = Field(default=None, max_length=100)
+
+
+class SetCardLabelsRequest(BaseModel):
+    label_names: list[str] = Field(default_factory=list)
 
 
 def get_user_id(conn: sqlite3.Connection, username: str) -> int:
@@ -123,8 +149,8 @@ def serialize_board(conn: sqlite3.Connection, board_id: str) -> BoardResponse:
     cards: dict[str, Card] = {}
     for column_row in column_rows:
         card_rows = conn.execute(
-            "SELECT id, title, details FROM cards WHERE column_id = ? "
-            "ORDER BY position",
+            "SELECT id, title, details, due_date, assignee_text FROM cards "
+            "WHERE column_id = ? ORDER BY position",
             (column_row["id"],),
         ).fetchall()
         for card_row in card_rows:
@@ -132,6 +158,8 @@ def serialize_board(conn: sqlite3.Connection, board_id: str) -> BoardResponse:
                 id=card_row["id"],
                 title=card_row["title"],
                 details=card_row["details"],
+                dueDate=card_row["due_date"],
+                assigneeText=card_row["assignee_text"],
             )
         columns.append(
             Column(
@@ -140,6 +168,28 @@ def serialize_board(conn: sqlite3.Connection, board_id: str) -> BoardResponse:
                 cardIds=[card_row["id"] for card_row in card_rows],
             )
         )
+
+    if cards:
+        label_rows = conn.execute(
+            """
+            SELECT card_labels.card_id AS card_id, labels.id AS id,
+                   labels.name AS name, labels.color AS color
+            FROM card_labels
+            JOIN labels ON labels.id = card_labels.label_id
+            JOIN cards ON cards.id = card_labels.card_id
+            JOIN columns ON columns.id = cards.column_id
+            WHERE columns.board_id = ?
+            """,
+            (board_id,),
+        ).fetchall()
+        for label_row in label_rows:
+            cards[label_row["card_id"]].labels.append(
+                Label(
+                    id=label_row["id"],
+                    name=label_row["name"],
+                    color=label_row["color"],
+                )
+            )
 
     return BoardResponse(columns=columns, cards=cards)
 
@@ -259,6 +309,70 @@ def move_card_db(
     for position, cid in enumerate(target_ids):
         conn.execute("UPDATE cards SET position = ? WHERE id = ?", (position, cid))
     return True
+
+
+def update_card_db(
+    conn: sqlite3.Connection,
+    board_id: str,
+    card_id: str,
+    fields: dict[str, str | None],
+) -> bool:
+    if not card_belongs_to_board(conn, card_id, board_id):
+        return False
+    updates = {
+        key: (None if key in NULLABLE_CARD_FIELDS and value == "" else value)
+        for key, value in fields.items()
+        if key in UPDATABLE_CARD_FIELDS
+    }
+    if not updates:
+        return True
+    set_clause = ", ".join(f"{key} = ?" for key in updates)
+    conn.execute(
+        f"UPDATE cards SET {set_clause} WHERE id = ?",
+        (*updates.values(), card_id),
+    )
+    return True
+
+
+def _get_or_create_label_db(conn: sqlite3.Connection, board_id: str, name: str) -> str:
+    row = conn.execute(
+        "SELECT id FROM labels WHERE board_id = ? AND name = ?", (board_id, name)
+    ).fetchone()
+    if row is not None:
+        return row["id"]
+    count_row = conn.execute(
+        "SELECT COUNT(*) AS n FROM labels WHERE board_id = ?", (board_id,)
+    ).fetchone()
+    color = LABEL_COLORS[count_row["n"] % len(LABEL_COLORS)]
+    label_id = f"label-{secrets.token_hex(6)}"
+    conn.execute(
+        "INSERT INTO labels (id, board_id, name, color) VALUES (?, ?, ?, ?)",
+        (label_id, board_id, name, color),
+    )
+    return label_id
+
+
+def set_labels_db(
+    conn: sqlite3.Connection, board_id: str, card_id: str, label_names: list[str]
+) -> bool:
+    if not card_belongs_to_board(conn, card_id, board_id):
+        return False
+    unique_names = list(dict.fromkeys(name.strip() for name in label_names if name.strip()))
+    label_ids = [_get_or_create_label_db(conn, board_id, name) for name in unique_names]
+    conn.execute("DELETE FROM card_labels WHERE card_id = ?", (card_id,))
+    for label_id in label_ids:
+        conn.execute(
+            "INSERT INTO card_labels (card_id, label_id) VALUES (?, ?)",
+            (card_id, label_id),
+        )
+    return True
+
+
+def list_labels_db(conn: sqlite3.Connection, board_id: str) -> list[sqlite3.Row]:
+    return conn.execute(
+        "SELECT id, name, color FROM labels WHERE board_id = ? ORDER BY name",
+        (board_id,),
+    ).fetchall()
 
 
 # --- HTTP routes ---------------------------------------------------------
@@ -410,5 +524,56 @@ def move_card(
         move_card_db(conn, board_id, card_id, body.column_id, body.index)
         conn.commit()
         return serialize_board(conn, board_id)
+    finally:
+        conn.close()
+
+
+@router.patch("/{board_id}/cards/{card_id}", response_model=BoardResponse)
+def update_card(
+    board_id: str,
+    card_id: str,
+    body: UpdateCardRequest,
+    username: Annotated[str, Depends(get_current_username)],
+) -> BoardResponse:
+    conn = get_connection()
+    try:
+        require_board(conn, username, board_id)
+        fields = body.model_dump(exclude_unset=True)
+        if not update_card_db(conn, board_id, card_id, fields):
+            raise HTTPException(status_code=404, detail="Card not found")
+        conn.commit()
+        return serialize_board(conn, board_id)
+    finally:
+        conn.close()
+
+
+@router.put("/{board_id}/cards/{card_id}/labels", response_model=BoardResponse)
+def set_card_labels(
+    board_id: str,
+    card_id: str,
+    body: SetCardLabelsRequest,
+    username: Annotated[str, Depends(get_current_username)],
+) -> BoardResponse:
+    conn = get_connection()
+    try:
+        require_board(conn, username, board_id)
+        if not set_labels_db(conn, board_id, card_id, body.label_names):
+            raise HTTPException(status_code=404, detail="Card not found")
+        conn.commit()
+        return serialize_board(conn, board_id)
+    finally:
+        conn.close()
+
+
+@router.get("/{board_id}/labels", response_model=list[Label])
+def list_labels(
+    board_id: str,
+    username: Annotated[str, Depends(get_current_username)],
+) -> list[Label]:
+    conn = get_connection()
+    try:
+        require_board(conn, username, board_id)
+        rows = list_labels_db(conn, board_id)
+        return [Label(id=row["id"], name=row["name"], color=row["color"]) for row in rows]
     finally:
         conn.close()

@@ -6,9 +6,18 @@ import type { Card } from "@/lib/kanban";
 type KanbanCardProps = {
   card: Card;
   onDelete: (cardId: string) => void;
+  onOpenDetails: (cardId: string) => void;
 };
 
-export const KanbanCard = ({ card, onDelete }: KanbanCardProps) => {
+const initials = (text: string) =>
+  text
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+
+export const KanbanCard = ({ card, onDelete, onOpenDetails }: KanbanCardProps) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: card.id });
 
@@ -31,14 +40,18 @@ export const KanbanCard = ({ card, onDelete }: KanbanCardProps) => {
       data-testid={`card-${card.id}`}
     >
       <div className="flex items-start justify-between gap-3">
-        <div>
+        <button
+          type="button"
+          onClick={() => onOpenDetails(card.id)}
+          className="text-left"
+        >
           <h4 className="font-display text-base font-semibold text-[var(--navy-dark)]">
             {card.title}
           </h4>
           <p className="mt-2 text-sm leading-6 text-[var(--gray-text)]">
             {card.details}
           </p>
-        </div>
+        </button>
         <button
           type="button"
           onClick={() => onDelete(card.id)}
@@ -63,6 +76,33 @@ export const KanbanCard = ({ card, onDelete }: KanbanCardProps) => {
           </svg>
         </button>
       </div>
+
+      {(card.labels.length > 0 || card.dueDate || card.assigneeText) && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {card.labels.map((label) => (
+            <span
+              key={label.id}
+              className="rounded-full px-2 py-0.5 text-xs font-semibold text-white"
+              style={{ backgroundColor: label.color }}
+            >
+              {label.name}
+            </span>
+          ))}
+          {card.dueDate && (
+            <span className="rounded-full border border-[var(--stroke)] px-2 py-0.5 text-xs font-semibold text-[var(--gray-text)]">
+              {card.dueDate}
+            </span>
+          )}
+          {card.assigneeText && (
+            <span
+              title={card.assigneeText}
+              className="flex h-5 w-5 items-center justify-center rounded-full bg-[var(--surface)] text-[10px] font-semibold text-[var(--navy-dark)]"
+            >
+              {initials(card.assigneeText)}
+            </span>
+          )}
+        </div>
+      )}
     </article>
   );
 };

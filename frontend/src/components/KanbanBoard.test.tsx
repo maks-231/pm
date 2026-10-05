@@ -11,7 +11,14 @@ const baseBoard: BoardData = {
     { id: "col-b", title: "Discovery", cardIds: [] },
   ],
   cards: {
-    "card-1": { id: "card-1", title: "First card", details: "Some notes" },
+    "card-1": {
+      id: "card-1",
+      title: "First card",
+      details: "Some notes",
+      dueDate: null,
+      assigneeText: null,
+      labels: [],
+    },
   },
 };
 
@@ -83,7 +90,14 @@ describe("KanbanBoard", () => {
       ],
       cards: {
         ...baseBoard.cards,
-        "card-2": { id: "card-2", title: "New card", details: "Notes" },
+        "card-2": {
+          id: "card-2",
+          title: "New card",
+          details: "Notes",
+          dueDate: null,
+          assigneeText: null,
+          labels: [],
+        },
       },
     };
     vi.spyOn(api, "addCard").mockResolvedValue(withNewCard);

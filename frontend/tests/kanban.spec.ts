@@ -104,6 +104,32 @@ test("persists changes across a reload and a fresh login", async ({ page }) => {
   await expect(firstColumn.getByText("Persisted card")).toBeVisible();
 });
 
+test("sets a card's due date, assignee, and labels, and they persist across reload", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByText("Align roadmap themes").click();
+
+  await page.getByLabel("Due date").fill("2026-11-01");
+  await page.getByLabel("Assignee").fill("Alex");
+  await page.getByLabel("Assignee").blur();
+  await page.getByLabel("New label").fill("Urgent");
+  await page.getByLabel("New label").press("Enter");
+
+  await expect(page.getByRole("button", { name: /urgent ×/i })).toBeVisible();
+  await page.getByRole("button", { name: "Close card details" }).click();
+
+  const card = page.getByTestId("card-card-1");
+  await expect(card.getByText("2026-11-01")).toBeVisible();
+  await expect(card.getByText("Urgent")).toBeVisible();
+  await expect(card.getByTitle("Alex")).toBeVisible();
+
+  await page.reload();
+  await expect(card.getByText("2026-11-01")).toBeVisible();
+  await expect(card.getByText("Urgent")).toBeVisible();
+  await expect(card.getByTitle("Alex")).toBeVisible();
+});
+
 test("creates a second board, switches between boards with isolated data, and deletes one", async ({
   page,
 }) => {

@@ -17,8 +17,9 @@ import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
 import { ChatSidebar } from "@/components/ChatSidebar";
 import { BoardSwitcher } from "@/components/BoardSwitcher";
-import { resolveDropTarget, type BoardData } from "@/lib/kanban";
-import type { BoardSummary } from "@/lib/api";
+import { CardDetailPanel } from "@/components/CardDetailPanel";
+import { resolveDropTarget, type BoardData, type Label } from "@/lib/kanban";
+import type { BoardSummary, UpdateCardFields } from "@/lib/api";
 import * as api from "@/lib/api";
 
 type KanbanBoardProps = {
@@ -57,6 +58,7 @@ export const KanbanBoard = ({
   const [loadError, setLoadError] = useState(false);
   const [mutationError, setMutationError] = useState(false);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
+  const [openCardId, setOpenCardId] = useState<string | null>(null);
 
   const loadBoard = () => {
     setLoadError(false);
@@ -81,6 +83,15 @@ export const KanbanBoard = ({
 
   const cardsById = useMemo(() => board?.cards ?? {}, [board]);
   const totalCardCount = board ? Object.keys(board.cards).length : 0;
+  const availableLabels = useMemo(() => {
+    const byId = new Map<string, Label>();
+    for (const card of Object.values(cardsById)) {
+      for (const label of card.labels) {
+        byId.set(label.id, label);
+      }
+    }
+    return Array.from(byId.values());
+  }, [cardsById]);
 
   const runMutation = (mutation: Promise<BoardData>): Promise<boolean> => {
     setMutationError(false);
@@ -133,7 +144,14 @@ export const KanbanBoard = ({
     runMutation(api.deleteCard(boardId, cardId));
   };
 
+  const handleUpdateCard = (cardId: string, fields: UpdateCardFields) =>
+    runMutation(api.updateCard(boardId, cardId, fields));
+
+  const handleSetLabels = (cardId: string, labelNames: string[]) =>
+    runMutation(api.setCardLabels(boardId, cardId, labelNames));
+
   const activeCard = activeCardId ? cardsById[activeCardId] : null;
+  const openCard = openCardId ? cardsById[openCardId] : null;
 
   if (loadError) {
     return (
@@ -226,6 +244,7 @@ export const KanbanBoard = ({
                 onRename={handleRenameColumn}
                 onAddCard={handleAddCard}
                 onDeleteCard={handleDeleteCard}
+                onOpenCardDetails={setOpenCardId}
               />
             ))}
           </section>
@@ -240,6 +259,16 @@ export const KanbanBoard = ({
       </main>
 
       <ChatSidebar boardId={boardId} onBoardUpdate={setBoard} />
+
+      {openCard && (
+        <CardDetailPanel
+          card={openCard}
+          availableLabels={availableLabels}
+          onClose={() => setOpenCardId(null)}
+          onUpdateCard={(fields) => handleUpdateCard(openCard.id, fields)}
+          onSetLabels={(labelNames) => handleSetLabels(openCard.id, labelNames)}
+        />
+      )}
     </div>
   );
 };

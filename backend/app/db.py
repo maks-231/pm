@@ -35,6 +35,20 @@ CREATE TABLE IF NOT EXISTS cards (
     position INTEGER NOT NULL,
     UNIQUE (column_id, position)
 );
+
+CREATE TABLE IF NOT EXISTS labels (
+    id TEXT PRIMARY KEY,
+    board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    color TEXT NOT NULL,
+    UNIQUE (board_id, name)
+);
+
+CREATE TABLE IF NOT EXISTS card_labels (
+    card_id TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    label_id TEXT NOT NULL REFERENCES labels(id) ON DELETE CASCADE,
+    PRIMARY KEY (card_id, label_id)
+);
 """
 
 # Mirrors frontend/src/lib/kanban.ts's initialData, so the first login looks
@@ -167,6 +181,8 @@ def _drop_boards_user_id_unique(conn: sqlite3.Connection) -> None:
 def _migrate_schema(conn: sqlite3.Connection) -> None:
     _add_column_if_missing(conn, "boards", "name", "name TEXT NOT NULL DEFAULT 'Board'")
     _drop_boards_user_id_unique(conn)
+    _add_column_if_missing(conn, "cards", "due_date", "due_date TEXT")
+    _add_column_if_missing(conn, "cards", "assignee_text", "assignee_text TEXT")
     conn.commit()
 
 

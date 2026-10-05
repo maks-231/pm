@@ -38,6 +38,7 @@ class Card(BaseModel):
     dueDate: str | None = None
     assigneeText: str | None = None
     labels: list[Label] = Field(default_factory=list)
+    commentCount: int = 0
 
 
 class Column(BaseModel):
@@ -87,6 +88,17 @@ class UpdateCardRequest(BaseModel):
 
 class SetCardLabelsRequest(BaseModel):
     label_names: list[str] = Field(default_factory=list)
+
+
+class CommentResponse(BaseModel):
+    id: str
+    author: str
+    body: str
+    createdAt: str
+
+
+class AddCommentRequest(BaseModel):
+    body: str = Field(min_length=1, max_length=2000)
 
 
 def get_user_id(conn: sqlite3.Connection, username: str) -> int:
@@ -190,6 +202,20 @@ def serialize_board(conn: sqlite3.Connection, board_id: str) -> BoardResponse:
                     color=label_row["color"],
                 )
             )
+
+        comment_count_rows = conn.execute(
+            """
+            SELECT cards.id AS card_id, COUNT(comments.id) AS comment_count
+            FROM cards
+            JOIN columns ON columns.id = cards.column_id
+            LEFT JOIN comments ON comments.card_id = cards.id
+            WHERE columns.board_id = ?
+            GROUP BY cards.id
+            """,
+            (board_id,),
+        ).fetchall()
+        for row in comment_count_rows:
+            cards[row["card_id"]].commentCount = row["comment_count"]
 
     return BoardResponse(columns=columns, cards=cards)
 
@@ -372,6 +398,42 @@ def list_labels_db(conn: sqlite3.Connection, board_id: str) -> list[sqlite3.Row]
     return conn.execute(
         "SELECT id, name, color FROM labels WHERE board_id = ? ORDER BY name",
         (board_id,),
+    ).fetchall()
+
+
+def add_comment_db(
+    conn: sqlite3.Connection,
+    board_id: str,
+    card_id: str,
+    user_id: int,
+    body: str,
+) -> str | None:
+    if not card_belongs_to_board(conn, card_id, board_id):
+        return None
+    comment_id = f"comment-{secrets.token_hex(6)}"
+    conn.execute(
+        "INSERT INTO comments (id, card_id, author_user_id, body) "
+        "VALUES (?, ?, ?, ?)",
+        (comment_id, card_id, user_id, body),
+    )
+    return comment_id
+
+
+def list_comments_db(
+    conn: sqlite3.Connection, board_id: str, card_id: str
+) -> list[sqlite3.Row] | None:
+    if not card_belongs_to_board(conn, card_id, board_id):
+        return None
+    return conn.execute(
+        """
+        SELECT comments.id AS id, users.username AS author,
+               comments.body AS body, comments.created_at AS created_at
+        FROM comments
+        JOIN users ON users.id = comments.author_user_id
+        WHERE comments.card_id = ?
+        ORDER BY comments.created_at
+        """,
+        (card_id,),
     ).fetchall()
 
 
@@ -575,5 +637,64 @@ def list_labels(
         require_board(conn, username, board_id)
         rows = list_labels_db(conn, board_id)
         return [Label(id=row["id"], name=row["name"], color=row["color"]) for row in rows]
+    finally:
+        conn.close()
+
+
+@router.get(
+    "/{board_id}/cards/{card_id}/comments", response_model=list[CommentResponse]
+)
+def list_card_comments(
+    board_id: str,
+    card_id: str,
+    username: Annotated[str, Depends(get_current_username)],
+) -> list[CommentResponse]:
+    conn = get_connection()
+    try:
+        require_board(conn, username, board_id)
+        rows = list_comments_db(conn, board_id, card_id)
+        if rows is None:
+            raise HTTPException(status_code=404, detail="Card not found")
+        return [
+            CommentResponse(
+                id=row["id"],
+                author=row["author"],
+                body=row["body"],
+                createdAt=row["created_at"],
+            )
+            for row in rows
+        ]
+    finally:
+        conn.close()
+
+
+@router.post(
+    "/{board_id}/cards/{card_id}/comments",
+    response_model=CommentResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def add_card_comment(
+    board_id: str,
+    card_id: str,
+    body: AddCommentRequest,
+    username: Annotated[str, Depends(get_current_username)],
+) -> CommentResponse:
+    conn = get_connection()
+    try:
+        require_board(conn, username, board_id)
+        user_id = get_user_id(conn, username)
+        comment_id = add_comment_db(conn, board_id, card_id, user_id, body.body)
+        if comment_id is None:
+            raise HTTPException(status_code=404, detail="Card not found")
+        conn.commit()
+        row = conn.execute(
+            "SELECT created_at FROM comments WHERE id = ?", (comment_id,)
+        ).fetchone()
+        return CommentResponse(
+            id=comment_id,
+            author=username,
+            body=body.body,
+            createdAt=row["created_at"],
+        )
     finally:
         conn.close()

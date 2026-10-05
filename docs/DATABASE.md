@@ -39,7 +39,16 @@ See `docs/schema.json` for the full table-by-table definition. Summary:
   of relying on row insertion order or an array, which SQL doesn't give
   you for free).
 - **cards** — belong to a column, also ordered by `position`. Moving a card
-  between columns is an `UPDATE` of its `column_id` and `position`.
+  between columns is an `UPDATE` of its `column_id` and `position`. Part 13
+  added nullable `due_date` and `assignee_text` (freeform text, not a
+  `users` foreign key — boards aren't shared, so there's no cross-account
+  picker).
+- **labels** — board-scoped, reusable by name (Part 13); `card_labels` is
+  the join table, replaced wholesale (delete-then-insert) on every label
+  update rather than diffed.
+- **comments** — per-card, author-attributed, timestamped (Part 14). No
+  automatic activity log beyond this — comments are the only
+  collaboration-trace feature in scope.
 
 IDs are app-generated `TEXT` strings (e.g. `col-<random>`, `card-<random>`),
 not autoincrement integers, so they keep the frontend's existing `col-*` /
@@ -63,7 +72,8 @@ have. Instead, `db.py`'s `get_connection()` runs the original
 idempotent guard functions (`_migrate_schema`):
 - `_add_column_if_missing(conn, table, column, column_def)` — checks
   `PRAGMA table_info` before `ALTER TABLE ... ADD COLUMN`. Used for
-  additive changes (e.g. `boards.name`).
+  additive changes (e.g. `boards.name`, `cards.due_date`,
+  `cards.assignee_text`).
 - `_drop_boards_user_id_unique(conn)` — checks `sqlite_master.sql` for the
   table still containing `UNIQUE`; if so, rebuilds `boards` without it in
   one `executescript`. Used for the one breaking change multi-board support

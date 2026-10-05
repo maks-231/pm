@@ -136,6 +136,28 @@ export type LabelSummary = { id: string; name: string; color: string };
 export const listLabels = (boardId: string): Promise<LabelSummary[]> =>
   request(`/api/boards/${boardId}/labels`);
 
+export type Comment = {
+  id: string;
+  author: string;
+  body: string;
+  createdAt: string;
+};
+
+export const listComments = (
+  boardId: string,
+  cardId: string
+): Promise<Comment[]> => request(`/api/boards/${boardId}/cards/${cardId}/comments`);
+
+export const addComment = (
+  boardId: string,
+  cardId: string,
+  body: string
+): Promise<Comment> =>
+  request(`/api/boards/${boardId}/cards/${cardId}/comments`, {
+    method: "POST",
+    body: JSON.stringify({ body }),
+  });
+
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 
 export type ChatResult = { reply: string; board: BoardData };

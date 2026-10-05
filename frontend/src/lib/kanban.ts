@@ -11,6 +11,7 @@ export type Card = {
   dueDate: string | null;
   assigneeText: string | null;
   labels: Label[];
+  commentCount: number;
 };
 
 export type Column = {

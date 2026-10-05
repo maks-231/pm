@@ -18,6 +18,7 @@ const baseBoard: BoardData = {
       dueDate: null,
       assigneeText: null,
       labels: [],
+      commentCount: 0,
     },
   },
 };
@@ -97,6 +98,7 @@ describe("KanbanBoard", () => {
           dueDate: null,
           assigneeText: null,
           labels: [],
+          commentCount: 0,
         },
       },
     };

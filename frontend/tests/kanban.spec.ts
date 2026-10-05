@@ -130,6 +130,22 @@ test("sets a card's due date, assignee, and labels, and they persist across relo
   await expect(card.getByTitle("Alex")).toBeVisible();
 });
 
+test("adds a comment to a card and it persists across a reopen", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByText("Align roadmap themes").click();
+
+  await page.getByLabel("New comment").fill("Looks good to me");
+  await page.getByRole("button", { name: "Comment" }).click();
+  await expect(page.getByText("Looks good to me")).toBeVisible();
+
+  await page.getByRole("button", { name: "Close card details" }).click();
+  await page.getByText("Align roadmap themes").click();
+
+  await expect(page.getByText("Looks good to me")).toBeVisible();
+});
+
 test("creates a second board, switches between boards with isolated data, and deletes one", async ({
   page,
 }) => {

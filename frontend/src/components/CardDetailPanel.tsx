@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Card, Label } from "@/lib/kanban";
-import type { UpdateCardFields } from "@/lib/api";
+import type { Comment, UpdateCardFields } from "@/lib/api";
 
 type CardDetailPanelProps = {
   card: Card;
@@ -10,6 +10,8 @@ type CardDetailPanelProps = {
   onClose: () => void;
   onUpdateCard: (fields: UpdateCardFields) => Promise<boolean>;
   onSetLabels: (labelNames: string[]) => Promise<boolean>;
+  onListComments: () => Promise<Comment[]>;
+  onAddComment: (body: string) => Promise<Comment>;
 };
 
 export const CardDetailPanel = ({
@@ -18,11 +20,26 @@ export const CardDetailPanel = ({
   onClose,
   onUpdateCard,
   onSetLabels,
+  onListComments,
+  onAddComment,
 }: CardDetailPanelProps) => {
   const [title, setTitle] = useState(card.title);
   const [details, setDetails] = useState(card.details);
   const [assignee, setAssignee] = useState(card.assigneeText ?? "");
   const [newLabel, setNewLabel] = useState("");
+  const [comments, setComments] = useState<Comment[] | null>(null);
+  const [newComment, setNewComment] = useState("");
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+  const [commentError, setCommentError] = useState(false);
+
+  useEffect(() => {
+    onListComments()
+      .then(setComments)
+      .catch(() => setCommentError(true));
+    // Only re-fetch if the open card itself changes, not on every parent
+    // re-render (onListComments is a fresh closure each render).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [card.id]);
 
   const labelNames = card.labels.map((label) => label.name);
   const selectedNames = new Set(labelNames);
@@ -74,13 +91,31 @@ export const CardDetailPanel = ({
     }
   };
 
+  const submitComment = async () => {
+    const trimmed = newComment.trim();
+    if (!trimmed || isSubmittingComment) {
+      return;
+    }
+    setIsSubmittingComment(true);
+    setCommentError(false);
+    try {
+      const comment = await onAddComment(trimmed);
+      setComments((prev) => [...(prev ?? []), comment]);
+      setNewComment("");
+    } catch {
+      setCommentError(true);
+    } finally {
+      setIsSubmittingComment(false);
+    }
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--navy-dark)]/30 px-6"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg rounded-[32px] border border-[var(--stroke)] bg-white p-8 shadow-[var(--shadow)]"
+        className="w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-[32px] border border-[var(--stroke)] bg-white p-8 shadow-[var(--shadow)]"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4">
@@ -190,6 +225,54 @@ export const CardDetailPanel = ({
               Add label
             </button>
           </div>
+        </div>
+
+        <div className="mt-6 border-t border-[var(--stroke)] pt-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-[var(--gray-text)]">
+            Comments
+          </p>
+          <div className="mt-2 space-y-2">
+            {(comments ?? []).map((comment) => (
+              <div
+                key={comment.id}
+                data-testid={`comment-${comment.id}`}
+                className="rounded-xl bg-[var(--surface)] px-3 py-2 text-sm"
+              >
+                <p className="text-xs font-semibold text-[var(--navy-dark)]">
+                  {comment.author}
+                </p>
+                <p className="mt-1 text-[var(--navy-dark)]">{comment.body}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-2 flex gap-2">
+            <input
+              value={newComment}
+              onChange={(event) => setNewComment(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  submitComment();
+                }
+              }}
+              placeholder="Add a comment…"
+              aria-label="New comment"
+              disabled={isSubmittingComment}
+              className="flex-1 rounded-xl border border-[var(--stroke)] bg-white px-3 py-2 text-sm text-[var(--navy-dark)] outline-none transition focus:border-[var(--primary-blue)] disabled:opacity-60"
+            />
+            <button
+              type="button"
+              onClick={submitComment}
+              disabled={isSubmittingComment || !newComment.trim()}
+              className="rounded-full bg-[var(--secondary-purple)] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:brightness-110 disabled:opacity-60"
+            >
+              Comment
+            </button>
+          </div>
+          {commentError && (
+            <p role="alert" className="mt-2 text-sm font-medium text-red-600">
+              Something went wrong. Please try again.
+            </p>
+          )}
         </div>
       </div>
     </div>

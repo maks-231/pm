@@ -12,6 +12,7 @@ const baseCard: Card = {
   dueDate: null,
   assigneeText: null,
   labels: [],
+  commentCount: 0,
 };
 
 // useSortable requires a DndContext ancestor. Matches KanbanBoard's actual

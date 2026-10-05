@@ -120,19 +120,114 @@
           "type": "INTEGER",
           "constraints": ["NOT NULL"],
           "description": "0-based display order within the card's column. Replaces the frontend's cardIds array order. Moving a card between columns updates column_id and reassigns position."
+        },
+        {
+          "name": "due_date",
+          "type": "TEXT",
+          "constraints": [],
+          "description": "Added in Part 13 via an additive ALTER TABLE guard. Nullable ISO 'YYYY-MM-DD' string, or NULL if unset. An empty string in the PATCH request body clears it to NULL."
+        },
+        {
+          "name": "assignee_text",
+          "type": "TEXT",
+          "constraints": [],
+          "description": "Added in Part 13. Freeform assignee name, not a foreign key to users: boards aren't shared/collaborative, so there is no cross-account picker. Nullable; empty string clears it."
         }
       ],
       "unique_constraints": [["column_id", "position"]]
+    },
+    {
+      "name": "labels",
+      "description": "Added in Part 13. Reusable, board-scoped labels; a given name only exists once per board and is reused across cards on that board.",
+      "columns": [
+        {
+          "name": "id",
+          "type": "TEXT",
+          "constraints": ["PRIMARY KEY"],
+          "description": "App-generated, e.g. 'label-<random>'."
+        },
+        {
+          "name": "board_id",
+          "type": "TEXT",
+          "constraints": ["NOT NULL", "REFERENCES boards(id) ON DELETE CASCADE"]
+        },
+        {
+          "name": "name",
+          "type": "TEXT",
+          "constraints": ["NOT NULL"]
+        },
+        {
+          "name": "color",
+          "type": "TEXT",
+          "constraints": ["NOT NULL"],
+          "description": "One of the 5 brand hex colors from AGENTS.md, assigned by cycling creation order within the board. No color picker."
+        }
+      ],
+      "unique_constraints": [["board_id", "name"]]
+    },
+    {
+      "name": "card_labels",
+      "description": "Added in Part 13. Join table between cards and labels; a card's full label set is replaced (delete-then-insert) on every PUT .../labels call, not incrementally patched.",
+      "columns": [
+        {
+          "name": "card_id",
+          "type": "TEXT",
+          "constraints": ["NOT NULL", "REFERENCES cards(id) ON DELETE CASCADE"]
+        },
+        {
+          "name": "label_id",
+          "type": "TEXT",
+          "constraints": ["NOT NULL", "REFERENCES labels(id) ON DELETE CASCADE"]
+        }
+      ],
+      "primary_key": ["card_id", "label_id"]
+    },
+    {
+      "name": "comments",
+      "description": "Added in Part 14. A per-card comment thread, author-attributed and timestamped. No activity log / audit trail beyond this: comments are the only collaboration-trace feature in scope.",
+      "columns": [
+        {
+          "name": "id",
+          "type": "TEXT",
+          "constraints": ["PRIMARY KEY"],
+          "description": "App-generated, e.g. 'comment-<random>'."
+        },
+        {
+          "name": "card_id",
+          "type": "TEXT",
+          "constraints": ["NOT NULL", "REFERENCES cards(id) ON DELETE CASCADE"]
+        },
+        {
+          "name": "author_user_id",
+          "type": "INTEGER",
+          "constraints": ["NOT NULL", "REFERENCES users(id)"],
+          "description": "The logged-in user who posted the comment, resolved server-side — never client-supplied."
+        },
+        {
+          "name": "body",
+          "type": "TEXT",
+          "constraints": ["NOT NULL"]
+        },
+        {
+          "name": "created_at",
+          "type": "TEXT",
+          "constraints": ["NOT NULL", "DEFAULT (CURRENT_TIMESTAMP)"]
+        }
+      ]
     }
   ],
   "relationships": [
     "users 1--many boards (as of Part 12; a user may have any number of boards)",
     "boards 1--many columns",
-    "columns 1--many cards"
+    "boards 1--many labels",
+    "columns 1--many cards",
+    "cards many--many labels (via card_labels)",
+    "cards 1--many comments",
+    "users 1--many comments (as author)"
   ],
   "frontend_mapping": {
     "BoardData.columns[]": "SELECT * FROM columns WHERE board_id = ? ORDER BY position",
-    "BoardData.cards (Record<id, Card>)": "SELECT * FROM cards WHERE column_id IN (board's columns), keyed by id",
+    "BoardData.cards (Record<id, Card>)": "SELECT * FROM cards WHERE column_id IN (board's columns), keyed by id; Card.labels joined via card_labels, Card.commentCount via COUNT(*) on comments",
     "Column.cardIds[]": "cards for that column_id, ORDER BY position, mapped to their ids"
   }
 }

@@ -150,6 +150,11 @@ export const KanbanBoard = ({
   const handleSetLabels = (cardId: string, labelNames: string[]) =>
     runMutation(api.setCardLabels(boardId, cardId, labelNames));
 
+  const handleListComments = (cardId: string) => api.listComments(boardId, cardId);
+
+  const handleAddComment = (cardId: string, body: string) =>
+    api.addComment(boardId, cardId, body);
+
   const activeCard = activeCardId ? cardsById[activeCardId] : null;
   const openCard = openCardId ? cardsById[openCardId] : null;
 
@@ -267,6 +272,8 @@ export const KanbanBoard = ({
           onClose={() => setOpenCardId(null)}
           onUpdateCard={(fields) => handleUpdateCard(openCard.id, fields)}
           onSetLabels={(labelNames) => handleSetLabels(openCard.id, labelNames)}
+          onListComments={() => handleListComments(openCard.id)}
+          onAddComment={(body) => handleAddComment(openCard.id, body)}
         />
       )}
     </div>

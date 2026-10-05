@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 import { CardDetailPanel } from "@/components/CardDetailPanel";
 import type { Card } from "@/lib/kanban";
+import type { Comment } from "@/lib/api";
 
 const baseCard: Card = {
   id: "card-1",
@@ -11,19 +12,29 @@ const baseCard: Card = {
   dueDate: null,
   assigneeText: null,
   labels: [],
+  commentCount: 0,
+};
+
+const defaultProps = {
+  availableLabels: [],
+  onClose: () => {},
+  onUpdateCard: () => Promise.resolve(true),
+  onSetLabels: () => Promise.resolve(true),
+  onListComments: (): Promise<Comment[]> => Promise.resolve([]),
+  onAddComment: (): Promise<Comment> =>
+    Promise.resolve({
+      id: "comment-1",
+      author: "user",
+      body: "x",
+      createdAt: "now",
+    }),
 };
 
 describe("CardDetailPanel", () => {
   it("commits a title change on blur", async () => {
     const onUpdateCard = vi.fn().mockResolvedValue(true);
     render(
-      <CardDetailPanel
-        card={baseCard}
-        availableLabels={[]}
-        onClose={() => {}}
-        onUpdateCard={onUpdateCard}
-        onSetLabels={() => Promise.resolve(true)}
-      />
+      <CardDetailPanel {...defaultProps} card={baseCard} onUpdateCard={onUpdateCard} />
     );
 
     const input = screen.getByLabelText("Card title");
@@ -37,13 +48,7 @@ describe("CardDetailPanel", () => {
   it("sets the due date immediately on change", async () => {
     const onUpdateCard = vi.fn().mockResolvedValue(true);
     render(
-      <CardDetailPanel
-        card={baseCard}
-        availableLabels={[]}
-        onClose={() => {}}
-        onUpdateCard={onUpdateCard}
-        onSetLabels={() => Promise.resolve(true)}
-      />
+      <CardDetailPanel {...defaultProps} card={baseCard} onUpdateCard={onUpdateCard} />
     );
 
     const dueDateInput = screen.getByLabelText("Due date");
@@ -55,13 +60,7 @@ describe("CardDetailPanel", () => {
   it("commits an assignee change on blur", async () => {
     const onUpdateCard = vi.fn().mockResolvedValue(true);
     render(
-      <CardDetailPanel
-        card={baseCard}
-        availableLabels={[]}
-        onClose={() => {}}
-        onUpdateCard={onUpdateCard}
-        onSetLabels={() => Promise.resolve(true)}
-      />
+      <CardDetailPanel {...defaultProps} card={baseCard} onUpdateCard={onUpdateCard} />
     );
 
     const assigneeInput = screen.getByLabelText("Assignee");
@@ -74,13 +73,7 @@ describe("CardDetailPanel", () => {
   it("adds a new label", async () => {
     const onSetLabels = vi.fn().mockResolvedValue(true);
     render(
-      <CardDetailPanel
-        card={baseCard}
-        availableLabels={[]}
-        onClose={() => {}}
-        onUpdateCard={() => Promise.resolve(true)}
-        onSetLabels={onSetLabels}
-      />
+      <CardDetailPanel {...defaultProps} card={baseCard} onSetLabels={onSetLabels} />
     );
 
     await userEvent.type(screen.getByLabelText("New label"), "Urgent{enter}");
@@ -96,10 +89,8 @@ describe("CardDetailPanel", () => {
     };
     render(
       <CardDetailPanel
+        {...defaultProps}
         card={cardWithLabel}
-        availableLabels={[]}
-        onClose={() => {}}
-        onUpdateCard={() => Promise.resolve(true)}
         onSetLabels={onSetLabels}
       />
     );
@@ -113,10 +104,9 @@ describe("CardDetailPanel", () => {
     const onSetLabels = vi.fn().mockResolvedValue(true);
     render(
       <CardDetailPanel
+        {...defaultProps}
         card={baseCard}
         availableLabels={[{ id: "label-1", name: "Bug", color: "#209dd7" }]}
-        onClose={() => {}}
-        onUpdateCard={() => Promise.resolve(true)}
         onSetLabels={onSetLabels}
       />
     );
@@ -128,20 +118,54 @@ describe("CardDetailPanel", () => {
 
   it("calls onClose when the close button is clicked", async () => {
     const onClose = vi.fn();
-    render(
-      <CardDetailPanel
-        card={baseCard}
-        availableLabels={[]}
-        onClose={onClose}
-        onUpdateCard={() => Promise.resolve(true)}
-        onSetLabels={() => Promise.resolve(true)}
-      />
-    );
+    render(<CardDetailPanel {...defaultProps} card={baseCard} onClose={onClose} />);
 
     await userEvent.click(
       screen.getByRole("button", { name: /close card details/i })
     );
 
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it("loads and renders existing comments", async () => {
+    const onListComments = vi.fn().mockResolvedValue([
+      { id: "comment-1", author: "user", body: "Looks good", createdAt: "now" },
+    ]);
+    render(
+      <CardDetailPanel {...defaultProps} card={baseCard} onListComments={onListComments} />
+    );
+
+    expect(await screen.findByText("Looks good")).toBeInTheDocument();
+    expect(screen.getByText("user")).toBeInTheDocument();
+  });
+
+  it("submits a new comment and appends it to the list", async () => {
+    const onAddComment = vi.fn().mockResolvedValue({
+      id: "comment-2",
+      author: "user",
+      body: "Nice work",
+      createdAt: "now",
+    });
+    render(
+      <CardDetailPanel {...defaultProps} card={baseCard} onAddComment={onAddComment} />
+    );
+
+    await userEvent.type(screen.getByLabelText("New comment"), "Nice work");
+    await userEvent.click(screen.getByRole("button", { name: "Comment" }));
+
+    expect(onAddComment).toHaveBeenCalledWith("Nice work");
+    expect(await screen.findByText("Nice work")).toBeInTheDocument();
+  });
+
+  it("shows an error when adding a comment fails", async () => {
+    const onAddComment = vi.fn().mockRejectedValue(new Error("network error"));
+    render(
+      <CardDetailPanel {...defaultProps} card={baseCard} onAddComment={onAddComment} />
+    );
+
+    await userEvent.type(screen.getByLabelText("New comment"), "Nice work");
+    await userEvent.click(screen.getByRole("button", { name: "Comment" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/went wrong/i);
   });
 });

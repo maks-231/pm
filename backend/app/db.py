@@ -49,6 +49,14 @@ CREATE TABLE IF NOT EXISTS card_labels (
     label_id TEXT NOT NULL REFERENCES labels(id) ON DELETE CASCADE,
     PRIMARY KEY (card_id, label_id)
 );
+
+CREATE TABLE IF NOT EXISTS comments (
+    id TEXT PRIMARY KEY,
+    card_id TEXT NOT NULL REFERENCES cards(id) ON DELETE CASCADE,
+    author_user_id INTEGER NOT NULL REFERENCES users(id),
+    body TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+);
 """
 
 # Mirrors frontend/src/lib/kanban.ts's initialData, so the first login looks

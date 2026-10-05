@@ -19,7 +19,7 @@ describe("ChatSidebar", () => {
       board: emptyBoard,
     });
 
-    render(<ChatSidebar onBoardUpdate={onBoardUpdate} />);
+    render(<ChatSidebar boardId="board-1" onBoardUpdate={onBoardUpdate} />);
     await openChat();
 
     await userEvent.type(
@@ -30,7 +30,7 @@ describe("ChatSidebar", () => {
 
     expect(await screen.findByText("Backlog has 2 cards.")).toBeInTheDocument();
     expect(screen.getByText("What's in Backlog?")).toBeInTheDocument();
-    expect(api.chat).toHaveBeenCalledWith("What's in Backlog?", []);
+    expect(api.chat).toHaveBeenCalledWith("board-1", "What's in Backlog?", []);
     expect(onBoardUpdate).toHaveBeenCalledWith(emptyBoard);
   });
 
@@ -42,7 +42,7 @@ describe("ChatSidebar", () => {
       })
     );
 
-    render(<ChatSidebar onBoardUpdate={() => {}} />);
+    render(<ChatSidebar boardId="board-1" onBoardUpdate={() => {}} />);
     await openChat();
 
     await userEvent.type(screen.getByLabelText("Chat message"), "hi");
@@ -57,7 +57,7 @@ describe("ChatSidebar", () => {
   it("shows an error when the request fails", async () => {
     vi.spyOn(api, "chat").mockRejectedValue(new Error("network error"));
 
-    render(<ChatSidebar onBoardUpdate={() => {}} />);
+    render(<ChatSidebar boardId="board-1" onBoardUpdate={() => {}} />);
     await openChat();
 
     await userEvent.type(screen.getByLabelText("Chat message"), "hi");
@@ -71,7 +71,7 @@ describe("ChatSidebar", () => {
       .mockResolvedValueOnce({ reply: "First reply", board: emptyBoard })
       .mockResolvedValueOnce({ reply: "Second reply", board: emptyBoard });
 
-    render(<ChatSidebar onBoardUpdate={() => {}} />);
+    render(<ChatSidebar boardId="board-1" onBoardUpdate={() => {}} />);
     await openChat();
 
     const input = screen.getByLabelText("Chat message");
@@ -85,7 +85,7 @@ describe("ChatSidebar", () => {
     await userEvent.click(send);
     await screen.findByText("Second reply");
 
-    expect(api.chat).toHaveBeenLastCalledWith("second message", [
+    expect(api.chat).toHaveBeenLastCalledWith("board-1", "second message", [
       { role: "user", content: "first message" },
       { role: "assistant", content: "First reply" },
     ]);

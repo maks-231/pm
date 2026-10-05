@@ -65,7 +65,9 @@ def test_signup_creates_account_and_session_and_board():
     assert response.json() == {"username": "alice"}
     assert client.cookies.get("session_token") is not None
 
-    board_response = client.get("/api/board")
+    boards = client.get("/api/boards").json()
+    assert len(boards) == 1
+    board_response = client.get(f"/api/boards/{boards[0]['id']}")
     assert board_response.status_code == 200
     board = board_response.json()
     assert [column["title"] for column in board["columns"]] == [

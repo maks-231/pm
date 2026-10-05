@@ -103,3 +103,36 @@ test("persists changes across a reload and a fresh login", async ({ page }) => {
 
   await expect(firstColumn.getByText("Persisted card")).toBeVisible();
 });
+
+test("creates a second board, switches between boards with isolated data, and deletes one", async ({
+  page,
+}) => {
+  const toggle = page.getByTestId("board-switcher-toggle");
+  const panel = page.getByTestId("board-switcher-panel");
+
+  await page.goto("/");
+  await expect(page.getByTestId("card-card-1")).toBeVisible();
+
+  await toggle.click();
+  await panel.getByRole("button", { name: /new board/i }).click();
+  await panel.getByPlaceholder("Board name").fill("Second board");
+  await panel.getByRole("button", { name: "Add" }).click();
+
+  // Creating a board switches to it; it has the default columns, no cards.
+  await expect(toggle).toHaveText(/Second board/);
+  await expect(page.locator('[data-testid^="column-"]')).toHaveCount(5);
+  await expect(page.getByTestId("card-card-1")).not.toBeVisible();
+
+  await toggle.click();
+  await panel.getByRole("button", { name: "Board 1", exact: true }).click();
+  await expect(page.getByTestId("card-card-1")).toBeVisible();
+
+  page.once("dialog", (dialog) => dialog.accept());
+  await toggle.click();
+  await panel.getByRole("button", { name: "Delete Second board" }).click();
+
+  await toggle.click();
+  await expect(
+    panel.getByRole("button", { name: "Second board", exact: true })
+  ).not.toBeVisible();
+});

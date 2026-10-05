@@ -20,7 +20,7 @@
           "name": "password_hash",
           "type": "TEXT",
           "constraints": ["NOT NULL"],
-          "description": "Placeholder for a real hashed password. Part 4's login still checks a hardcoded 'user'/'password' pair in-memory and does not read this column yet; it exists so a future change to DB-backed auth doesn't require a schema migration. Seeded with a hash of 'password' for consistency."
+          "description": "Argon2id hash (argon2-cffi), read by /api/login and written by /api/signup as of Part 11. No plaintext or unsalted hash is ever stored."
         },
         {
           "name": "created_at",
@@ -32,7 +32,7 @@
     },
     {
       "name": "boards",
-      "description": "One Kanban board per user. The MVP enforces exactly one via a UNIQUE constraint on user_id; a future multi-board feature would just drop that constraint.",
+      "description": "A Kanban board belonging to a user. As of Part 12, a user can have any number of boards (the original UNIQUE constraint on user_id was dropped via a guard-function migration in db.py, not a migration tool — see DATABASE.md).",
       "columns": [
         {
           "name": "id",
@@ -45,9 +45,14 @@
           "type": "INTEGER",
           "constraints": [
             "NOT NULL",
-            "UNIQUE",
             "REFERENCES users(id) ON DELETE CASCADE"
           ]
+        },
+        {
+          "name": "name",
+          "type": "TEXT",
+          "constraints": ["NOT NULL", "DEFAULT 'Board'"],
+          "description": "Added in Part 12 via an additive ALTER TABLE guard. User-editable display name shown in the board switcher."
         },
         {
           "name": "created_at",
@@ -121,7 +126,7 @@
     }
   ],
   "relationships": [
-    "users 1--1 boards (one board per user, MVP-only constraint via UNIQUE user_id)",
+    "users 1--many boards (as of Part 12; a user may have any number of boards)",
     "boards 1--many columns",
     "columns 1--many cards"
   ],

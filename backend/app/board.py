@@ -8,7 +8,15 @@ from pydantic import BaseModel, Field
 from app.auth import get_current_username
 from app.db import get_connection
 
-router = APIRouter(prefix="/api/board", tags=["board"])
+router = APIRouter(prefix="/api/boards", tags=["board"])
+
+DEFAULT_COLUMN_TITLES = [
+    "Backlog",
+    "Discovery",
+    "In Progress",
+    "Review",
+    "Done",
+]
 
 
 class Card(BaseModel):
@@ -26,6 +34,19 @@ class Column(BaseModel):
 class BoardResponse(BaseModel):
     columns: list[Column]
     cards: dict[str, Card]
+
+
+class BoardSummary(BaseModel):
+    id: str
+    name: str
+
+
+class CreateBoardRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+
+
+class RenameBoardRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
 
 
 class RenameColumnRequest(BaseModel):
@@ -47,24 +68,24 @@ def get_user_id(conn: sqlite3.Connection, username: str) -> int:
         "SELECT id FROM users WHERE username = ?", (username,)
     ).fetchone()
     if row is None:
-        # Should be unreachable: get_connection() seeds the hardcoded user.
+        # Should be unreachable: a session can only exist for a username
+        # that was written to the users table at signup/seed time.
         raise HTTPException(status_code=500, detail="User not found in database")
     return row["id"]
 
 
-def get_board_id(conn: sqlite3.Connection, user_id: int) -> str:
+def user_owns_board(conn: sqlite3.Connection, user_id: int, board_id: str) -> bool:
     row = conn.execute(
-        "SELECT id FROM boards WHERE user_id = ?", (user_id,)
+        "SELECT 1 FROM boards WHERE id = ? AND user_id = ?",
+        (board_id, user_id),
     ).fetchone()
-    if row is None:
-        # Should be unreachable: get_connection() seeds a board per user.
-        raise HTTPException(status_code=500, detail="Board not found for user")
-    return row["id"]
+    return row is not None
 
 
-def board_id_for(conn: sqlite3.Connection, username: str) -> str:
+def require_board(conn: sqlite3.Connection, username: str, board_id: str) -> None:
     user_id = get_user_id(conn, username)
-    return get_board_id(conn, user_id)
+    if not user_owns_board(conn, user_id, board_id):
+        raise HTTPException(status_code=404, detail="Board not found")
 
 
 def column_belongs_to_board(
@@ -121,6 +142,43 @@ def serialize_board(conn: sqlite3.Connection, board_id: str) -> BoardResponse:
         )
 
     return BoardResponse(columns=columns, cards=cards)
+
+
+# --- Board CRUD (pure DB functions) -------------------------------------
+
+
+def list_boards_db(conn: sqlite3.Connection, user_id: int) -> list[sqlite3.Row]:
+    return conn.execute(
+        "SELECT id, name FROM boards WHERE user_id = ? ORDER BY created_at DESC",
+        (user_id,),
+    ).fetchall()
+
+
+def create_board_db(conn: sqlite3.Connection, user_id: int, name: str) -> str:
+    board_id = f"board-{secrets.token_hex(6)}"
+    conn.execute(
+        "INSERT INTO boards (id, user_id, name) VALUES (?, ?, ?)",
+        (board_id, user_id, name),
+    )
+    for position, title in enumerate(DEFAULT_COLUMN_TITLES):
+        column_id = f"col-{secrets.token_hex(6)}"
+        conn.execute(
+            "INSERT INTO columns (id, board_id, title, position) VALUES (?, ?, ?, ?)",
+            (column_id, board_id, title, position),
+        )
+    return board_id
+
+
+def rename_board_db(conn: sqlite3.Connection, board_id: str, name: str) -> bool:
+    cursor = conn.execute(
+        "UPDATE boards SET name = ? WHERE id = ?", (name, board_id)
+    )
+    return cursor.rowcount > 0
+
+
+def delete_board_db(conn: sqlite3.Connection, board_id: str) -> bool:
+    cursor = conn.execute("DELETE FROM boards WHERE id = ?", (board_id,))
+    return cursor.rowcount > 0
 
 
 # --- Pure DB mutations -------------------------------------------------
@@ -206,27 +264,87 @@ def move_card_db(
 # --- HTTP routes ---------------------------------------------------------
 
 
-@router.get("", response_model=BoardResponse)
+@router.get("", response_model=list[BoardSummary])
+def list_boards(
+    username: Annotated[str, Depends(get_current_username)],
+) -> list[BoardSummary]:
+    conn = get_connection()
+    try:
+        user_id = get_user_id(conn, username)
+        rows = list_boards_db(conn, user_id)
+        return [BoardSummary(id=row["id"], name=row["name"]) for row in rows]
+    finally:
+        conn.close()
+
+
+@router.post("", response_model=BoardSummary, status_code=status.HTTP_201_CREATED)
+def create_board(
+    body: CreateBoardRequest,
+    username: Annotated[str, Depends(get_current_username)],
+) -> BoardSummary:
+    conn = get_connection()
+    try:
+        user_id = get_user_id(conn, username)
+        board_id = create_board_db(conn, user_id, body.name)
+        conn.commit()
+        return BoardSummary(id=board_id, name=body.name)
+    finally:
+        conn.close()
+
+
+@router.patch("/{board_id}", response_model=BoardSummary)
+def rename_board(
+    board_id: str,
+    body: RenameBoardRequest,
+    username: Annotated[str, Depends(get_current_username)],
+) -> BoardSummary:
+    conn = get_connection()
+    try:
+        require_board(conn, username, board_id)
+        rename_board_db(conn, board_id, body.name)
+        conn.commit()
+        return BoardSummary(id=board_id, name=body.name)
+    finally:
+        conn.close()
+
+
+@router.delete("/{board_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_board(
+    board_id: str,
+    username: Annotated[str, Depends(get_current_username)],
+) -> None:
+    conn = get_connection()
+    try:
+        require_board(conn, username, board_id)
+        delete_board_db(conn, board_id)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+@router.get("/{board_id}", response_model=BoardResponse)
 def get_board(
+    board_id: str,
     username: Annotated[str, Depends(get_current_username)],
 ) -> BoardResponse:
     conn = get_connection()
     try:
-        board_id = board_id_for(conn, username)
+        require_board(conn, username, board_id)
         return serialize_board(conn, board_id)
     finally:
         conn.close()
 
 
-@router.patch("/columns/{column_id}", response_model=BoardResponse)
+@router.patch("/{board_id}/columns/{column_id}", response_model=BoardResponse)
 def rename_column(
+    board_id: str,
     column_id: str,
     body: RenameColumnRequest,
     username: Annotated[str, Depends(get_current_username)],
 ) -> BoardResponse:
     conn = get_connection()
     try:
-        board_id = board_id_for(conn, username)
+        require_board(conn, username, board_id)
         if not rename_column_db(conn, board_id, column_id, body.title):
             raise HTTPException(status_code=404, detail="Column not found")
         conn.commit()
@@ -236,18 +354,19 @@ def rename_column(
 
 
 @router.post(
-    "/columns/{column_id}/cards",
+    "/{board_id}/columns/{column_id}/cards",
     response_model=BoardResponse,
     status_code=status.HTTP_201_CREATED,
 )
 def add_card(
+    board_id: str,
     column_id: str,
     body: AddCardRequest,
     username: Annotated[str, Depends(get_current_username)],
 ) -> BoardResponse:
     conn = get_connection()
     try:
-        board_id = board_id_for(conn, username)
+        require_board(conn, username, board_id)
         card_id = add_card_db(conn, board_id, column_id, body.title, body.details)
         if card_id is None:
             raise HTTPException(status_code=404, detail="Column not found")
@@ -257,14 +376,15 @@ def add_card(
         conn.close()
 
 
-@router.delete("/cards/{card_id}", response_model=BoardResponse)
+@router.delete("/{board_id}/cards/{card_id}", response_model=BoardResponse)
 def delete_card(
+    board_id: str,
     card_id: str,
     username: Annotated[str, Depends(get_current_username)],
 ) -> BoardResponse:
     conn = get_connection()
     try:
-        board_id = board_id_for(conn, username)
+        require_board(conn, username, board_id)
         if not delete_card_db(conn, board_id, card_id):
             raise HTTPException(status_code=404, detail="Card not found")
         conn.commit()
@@ -273,15 +393,16 @@ def delete_card(
         conn.close()
 
 
-@router.patch("/cards/{card_id}/move", response_model=BoardResponse)
+@router.patch("/{board_id}/cards/{card_id}/move", response_model=BoardResponse)
 def move_card(
+    board_id: str,
     card_id: str,
     body: MoveCardRequest,
     username: Annotated[str, Depends(get_current_username)],
 ) -> BoardResponse:
     conn = get_connection()
     try:
-        board_id = board_id_for(conn, username)
+        require_board(conn, username, board_id)
         if not card_belongs_to_board(conn, card_id, board_id):
             raise HTTPException(status_code=404, detail="Card not found")
         if not column_belongs_to_board(conn, body.column_id, board_id):

@@ -5,18 +5,21 @@
 Matches `AGENTS.md`'s technical decision: the whole app runs in one local
 Docker container, single process, no separate DB server to operate. SQLite
 is a single file, needs no network service, and Python's standard library
-can talk to it directly. For an MVP with one seeded user and one board,
-there's no case for anything heavier.
+can talk to it directly.
 
 ## File location and creation
 
 The database lives at `backend/data/app.db` (gitignored, like
-`backend/static/`). On backend startup, if the file doesn't exist, the app:
+`backend/static/`). On every `get_connection()` call (not just startup), the
+app:
 1. Creates `backend/data/` if missing.
-2. Creates the file and runs the schema from `docs/schema.json` against it
-   (`CREATE TABLE IF NOT EXISTS ...` for each table).
-3. Seeds the single MVP user (`user`, with a hash of `password`) and an
-   empty board with the five default columns, if no rows exist yet.
+2. Runs the base schema (`CREATE TABLE IF NOT EXISTS ...` for each table).
+3. Runs the idempotent schema migrations in `db.py`'s `_migrate_schema`
+   (see "Migrations" below).
+4. Seeds the hardcoded demo user (`user`, Argon2-hashed `password`) and its
+   demo board, but only at the moment that user row is first created — not
+   whenever it happens to have zero boards (deleting your last board must
+   stay empty, not resurrect the demo data).
 
 This mirrors what `backend/static/` already does for the frontend build:
 nothing to check in, nothing to manually initialize, works on a clean
@@ -27,13 +30,11 @@ checkout.
 See `docs/schema.json` for the full table-by-table definition. Summary:
 
 - **users** — one row per person who can sign in. `password_hash` is a
-  placeholder: Part 4's login still checks a hardcoded `user`/`password`
-  pair in memory and doesn't read this table. It's here so that switching
-  auth to be DB-backed later doesn't require a schema change.
-- **boards** — one per user. A `UNIQUE` constraint on `boards.user_id`
-  enforces the MVP's "one board per user" limitation at the DB level.
-  Dropping that constraint is the entire migration needed for multi-board
-  support later.
+  real Argon2id hash (`argon2-cffi`), read by `/api/login` and written by
+  `/api/signup` and the demo seed (Part 11).
+- **boards** — belongs to a user; a user can have any number of boards
+  (Part 12 dropped the original `UNIQUE` constraint on `user_id`). Has a
+  user-editable `name`.
 - **columns** — belong to a board, ordered by a `position` integer (instead
   of relying on row insertion order or an array, which SQL doesn't give
   you for free).
@@ -45,23 +46,31 @@ not autoincrement integers, so they keep the frontend's existing `col-*` /
 `card-*` convention (see `frontend/AGENTS.md`) all the way through the API —
 no translation layer between DB ids and frontend ids.
 
-## Multi-user design, single-user MVP
+## Multi-user, multi-board
 
-The schema already supports many users and would support many boards per
-user with one constraint removed. The MVP intentionally restricts this:
-- `AGENTS.md`: "there will only be a user sign in (hardcoded to 'user' and
-  'password') but the database will support multiple users for future."
-- `AGENTS.md`: "there will only be 1 Kanban board per signed in user."
-
-Both limitations are enforced by the schema itself (`boards.user_id UNIQUE`)
-or by the application layer (Part 4's hardcoded credential check), not by
-anything that would need rearchitecting later — just loosened.
+As of Part 11/12, both of the original MVP's restrictions have been lifted:
+anyone can sign up for their own account, and any user can have any number
+of boards, switchable via the board picker in the UI. Boards are still not
+shared/collaborative — each board belongs to exactly one user, with no
+concept of inviting other accounts (see `AGENTS.md`'s Limitations).
 
 ## Migrations
 
-No migration tool for the MVP. There's one schema, created fresh via
-`CREATE TABLE IF NOT EXISTS` on first run; if the schema changes during
-development, the simplest fix is deleting `backend/data/app.db` and letting
-it recreate (acceptable — it's local, disposable data, not production). If
-the project grows past the MVP, revisit with a real migration tool
-(e.g. Alembic) at that point rather than guessing at future needs now.
+Still no migration tool (e.g. Alembic) — the project deliberately uses raw
+`sqlite3`, no ORM, and Alembic wants a model layer this project doesn't
+have. Instead, `db.py`'s `get_connection()` runs the original
+`CREATE TABLE IF NOT EXISTS` schema and then a small set of named,
+idempotent guard functions (`_migrate_schema`):
+- `_add_column_if_missing(conn, table, column, column_def)` — checks
+  `PRAGMA table_info` before `ALTER TABLE ... ADD COLUMN`. Used for
+  additive changes (e.g. `boards.name`).
+- `_drop_boards_user_id_unique(conn)` — checks `sqlite_master.sql` for the
+  table still containing `UNIQUE`; if so, rebuilds `boards` without it in
+  one `executescript`. Used for the one breaking change multi-board support
+  needed.
+
+This runs on every connection, same as the base schema, so it's safe
+regardless of how the app is booted. Because real user data exists via
+signup as of Part 11, "delete `backend/data/app.db` and let it recreate" is
+no longer an acceptable migration strategy for schema changes — new changes
+should follow the same guard-function pattern instead.

@@ -7,10 +7,15 @@ import type { ChatMessage } from "@/lib/api";
 import type { BoardData } from "@/lib/kanban";
 
 type ChatSidebarProps = {
+  boardId: string;
   onBoardUpdate: (board: BoardData) => void;
 };
 
-export const ChatSidebar = ({ onBoardUpdate }: ChatSidebarProps) => {
+// The AI is scoped to whichever board is open. The parent remounts this
+// component with a fresh `key` per board id (see AuthGate/KanbanBoard), so
+// switching boards always starts a fresh conversation rather than carrying
+// over context about a different board.
+export const ChatSidebar = ({ boardId, onBoardUpdate }: ChatSidebarProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -31,7 +36,7 @@ export const ChatSidebar = ({ onBoardUpdate }: ChatSidebarProps) => {
     setIsSending(true);
 
     try {
-      const result = await api.chat(text, history);
+      const result = await api.chat(boardId, text, history);
       setMessages((prev) => [...prev, { role: "assistant", content: result.reply }]);
       onBoardUpdate(result.board);
     } catch {

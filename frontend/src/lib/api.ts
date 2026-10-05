@@ -2,6 +2,8 @@ import type { BoardData } from "@/lib/kanban";
 
 export type Session = { username: string };
 
+export type BoardSummary = { id: string; name: string };
+
 class ApiError extends Error {}
 
 const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
@@ -41,36 +43,63 @@ export const signup = (
 export const logout = (): Promise<void> =>
   request("/api/logout", { method: "POST" });
 
-export const getBoard = (): Promise<BoardData> => request("/api/board");
+export const listBoards = (): Promise<BoardSummary[]> => request("/api/boards");
+
+export const createBoard = (name: string): Promise<BoardSummary> =>
+  request("/api/boards", {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
+
+export const renameBoard = (
+  boardId: string,
+  name: string
+): Promise<BoardSummary> =>
+  request(`/api/boards/${boardId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ name }),
+  });
+
+export const deleteBoard = (boardId: string): Promise<void> =>
+  request(`/api/boards/${boardId}`, { method: "DELETE" });
+
+export const getBoard = (boardId: string): Promise<BoardData> =>
+  request(`/api/boards/${boardId}`);
 
 export const renameColumn = (
+  boardId: string,
   columnId: string,
   title: string
 ): Promise<BoardData> =>
-  request(`/api/board/columns/${columnId}`, {
+  request(`/api/boards/${boardId}/columns/${columnId}`, {
     method: "PATCH",
     body: JSON.stringify({ title }),
   });
 
 export const addCard = (
+  boardId: string,
   columnId: string,
   title: string,
   details: string
 ): Promise<BoardData> =>
-  request(`/api/board/columns/${columnId}/cards`, {
+  request(`/api/boards/${boardId}/columns/${columnId}/cards`, {
     method: "POST",
     body: JSON.stringify({ title, details }),
   });
 
-export const deleteCard = (cardId: string): Promise<BoardData> =>
-  request(`/api/board/cards/${cardId}`, { method: "DELETE" });
+export const deleteCard = (
+  boardId: string,
+  cardId: string
+): Promise<BoardData> =>
+  request(`/api/boards/${boardId}/cards/${cardId}`, { method: "DELETE" });
 
 export const moveCard = (
+  boardId: string,
   cardId: string,
   columnId: string,
   index: number
 ): Promise<BoardData> =>
-  request(`/api/board/cards/${cardId}/move`, {
+  request(`/api/boards/${boardId}/cards/${cardId}/move`, {
     method: "PATCH",
     body: JSON.stringify({ column_id: columnId, index }),
   });
@@ -80,10 +109,11 @@ export type ChatMessage = { role: "user" | "assistant"; content: string };
 export type ChatResult = { reply: string; board: BoardData };
 
 export const chat = (
+  boardId: string,
   message: string,
   history: ChatMessage[]
 ): Promise<ChatResult> =>
-  request("/api/ai/chat", {
+  request(`/api/boards/${boardId}/ai/chat`, {
     method: "POST",
     body: JSON.stringify({ message, history }),
   });

@@ -10,10 +10,10 @@ from app.auth import get_current_username
 from app.board import (
     BoardResponse,
     add_card_db,
-    board_id_for,
     delete_card_db,
     move_card_db,
     rename_column_db,
+    require_board,
     serialize_board,
 )
 from app.db import get_connection
@@ -21,14 +21,14 @@ from app.db import get_connection
 DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 PING_PROMPT = "What is 2+2? Answer with only the number."
 
-router = APIRouter(prefix="/api/ai", tags=["ai"])
+router = APIRouter(tags=["ai"])
 
 
 class PingResponse(BaseModel):
     reply: str
 
 
-@router.post("/ping", response_model=PingResponse)
+@router.post("/api/ai/ping", response_model=PingResponse)
 def ping(
     _username: Annotated[str, Depends(get_current_username)],
 ) -> PingResponse:
@@ -254,8 +254,9 @@ def _apply_operation(conn, board_id: str, op: Operation) -> None:
             move_card_db(conn, board_id, op.card_id, op.column_id, op.index)
 
 
-@router.post("/chat", response_model=ChatResponse)
+@router.post("/api/boards/{board_id}/ai/chat", response_model=ChatResponse)
 def chat(
+    board_id: str,
     body: ChatRequest,
     username: Annotated[str, Depends(get_current_username)],
 ) -> ChatResponse:
@@ -263,7 +264,7 @@ def chat(
 
     conn = get_connection()
     try:
-        board_id = board_id_for(conn, username)
+        require_board(conn, username, board_id)
         board_json = serialize_board(conn, board_id).model_dump_json()
 
         messages = [

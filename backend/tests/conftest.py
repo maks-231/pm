@@ -21,6 +21,13 @@ def authed_client():
     return client
 
 
+@pytest.fixture
+def board_id(authed_client):
+    """The seeded user's one (first) board id."""
+    boards = authed_client.get("/api/boards").json()
+    return boards[0]["id"]
+
+
 def signup_and_login(username: str, password: str = "password123") -> TestClient:
     """Create a fresh user via /api/signup and return a client holding its session."""
     client = TestClient(app)

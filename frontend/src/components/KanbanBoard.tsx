@@ -16,10 +16,18 @@ import {
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
 import { ChatSidebar } from "@/components/ChatSidebar";
+import { BoardSwitcher } from "@/components/BoardSwitcher";
 import { resolveDropTarget, type BoardData } from "@/lib/kanban";
+import type { BoardSummary } from "@/lib/api";
 import * as api from "@/lib/api";
 
 type KanbanBoardProps = {
+  boardId: string;
+  boards: BoardSummary[];
+  onSwitchBoard: (boardId: string) => void;
+  onCreateBoard: (name: string) => void;
+  onRenameBoard: (boardId: string, name: string) => void;
+  onDeleteBoard: (boardId: string) => void;
   onLogout: () => void;
 };
 
@@ -36,7 +44,15 @@ const collisionDetection: CollisionDetection = (args) => {
 
 const MUTATION_ERROR_MESSAGE = "That didn't save. Please try again.";
 
-export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
+export const KanbanBoard = ({
+  boardId,
+  boards,
+  onSwitchBoard,
+  onCreateBoard,
+  onRenameBoard,
+  onDeleteBoard,
+  onLogout,
+}: KanbanBoardProps) => {
   const [board, setBoard] = useState<BoardData | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [mutationError, setMutationError] = useState(false);
@@ -45,15 +61,17 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
   const loadBoard = () => {
     setLoadError(false);
     setBoard(null);
-    api.getBoard().then(setBoard).catch(() => setLoadError(true));
+    api.getBoard(boardId).then(setBoard).catch(() => setLoadError(true));
   };
 
   // Not loadBoard() directly: that resets state synchronously before the
   // fetch, which is only needed for the "Try again" button's retry case,
-  // not the initial mount (state already starts at these defaults).
+  // not the initial mount (state already starts at these defaults). The
+  // parent remounts this component with a fresh `key` per board id, so a
+  // board switch is always a fresh mount too.
   useEffect(() => {
-    api.getBoard().then(setBoard).catch(() => setLoadError(true));
-  }, []);
+    api.getBoard(boardId).then(setBoard).catch(() => setLoadError(true));
+  }, [boardId]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -98,17 +116,21 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
       return;
     }
 
-    runMutation(api.moveCard(active.id as string, target.columnId, target.index));
+    runMutation(
+      api.moveCard(boardId, active.id as string, target.columnId, target.index)
+    );
   };
 
   const handleRenameColumn = (columnId: string, title: string) =>
-    runMutation(api.renameColumn(columnId, title));
+    runMutation(api.renameColumn(boardId, columnId, title));
 
   const handleAddCard = (columnId: string, title: string, details: string) =>
-    runMutation(api.addCard(columnId, title, details || "No details yet."));
+    runMutation(
+      api.addCard(boardId, columnId, title, details || "No details yet.")
+    );
 
   const handleDeleteCard = (_columnId: string, cardId: string) => {
-    runMutation(api.deleteCard(cardId));
+    runMutation(api.deleteCard(boardId, cardId));
   };
 
   const activeCard = activeCardId ? cardsById[activeCardId] : null;
@@ -149,11 +171,21 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
         <header className="flex flex-wrap items-center justify-between gap-6 rounded-[32px] border border-[var(--stroke)] bg-white/80 px-8 py-6 shadow-[var(--shadow)] backdrop-blur">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.35em] text-[var(--gray-text)]">
-              Single Board Kanban
+              Project Board
             </p>
             <h1 className="mt-2 font-display text-3xl font-semibold text-[var(--navy-dark)]">
               Kanban Studio
             </h1>
+            <div className="mt-3">
+              <BoardSwitcher
+                boards={boards}
+                currentBoardId={boardId}
+                onSwitch={onSwitchBoard}
+                onCreate={onCreateBoard}
+                onRename={onRenameBoard}
+                onDelete={onDeleteBoard}
+              />
+            </div>
           </div>
           <div className="flex items-center gap-4">
             <div className="rounded-2xl border border-[var(--stroke)] bg-[var(--surface)] px-5 py-3">
@@ -207,7 +239,7 @@ export const KanbanBoard = ({ onLogout }: KanbanBoardProps) => {
         </DndContext>
       </main>
 
-      <ChatSidebar onBoardUpdate={setBoard} />
+      <ChatSidebar boardId={boardId} onBoardUpdate={setBoard} />
     </div>
   );
 };

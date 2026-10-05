@@ -17,8 +17,8 @@ from app.auth import (
     hash_password,
     verify_password,
 )
-from app.board import router as board_router
-from app.db import create_user_board, get_connection
+from app.board import create_board_db, router as board_router
+from app.db import get_connection
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
@@ -52,7 +52,7 @@ def signup(credentials: SignupRequest, response: Response) -> SessionResponse:
             (credentials.username, hash_password(credentials.password)),
         )
         user_id = cursor.lastrowid
-        create_user_board(conn, user_id)
+        create_board_db(conn, user_id, "Board 1")
         conn.commit()
     finally:
         conn.close()

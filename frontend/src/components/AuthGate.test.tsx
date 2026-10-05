@@ -6,6 +6,7 @@ import * as api from "@/lib/api";
 import type { BoardData } from "@/lib/kanban";
 
 const emptyBoard: BoardData = { columns: [], cards: {} };
+const oneBoardSummary = [{ id: "board-1", name: "Board 1" }];
 
 describe("AuthGate", () => {
   it("shows the login screen when there is no session", async () => {
@@ -18,6 +19,7 @@ describe("AuthGate", () => {
 
   it("shows the kanban board when a session already exists", async () => {
     vi.spyOn(api, "getSession").mockResolvedValue({ username: "user" });
+    vi.spyOn(api, "listBoards").mockResolvedValue(oneBoardSummary);
     vi.spyOn(api, "getBoard").mockResolvedValue(emptyBoard);
 
     render(<AuthGate />);
@@ -30,6 +32,7 @@ describe("AuthGate", () => {
 
   it("returns to the login screen after logging out", async () => {
     vi.spyOn(api, "getSession").mockResolvedValue({ username: "user" });
+    vi.spyOn(api, "listBoards").mockResolvedValue(oneBoardSummary);
     vi.spyOn(api, "getBoard").mockResolvedValue(emptyBoard);
     vi.spyOn(api, "logout").mockResolvedValue(undefined);
 

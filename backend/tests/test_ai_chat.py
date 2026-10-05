@@ -42,22 +42,24 @@ def test_chat_requires_login():
     from fastapi.testclient import TestClient
 
     client = TestClient(main_module.app)
-    response = client.post("/api/ai/chat", json={"message": "hi", "history": []})
+    response = client.post(
+        "/api/boards/irrelevant-board/ai/chat", json={"message": "hi", "history": []}
+    )
     assert response.status_code == 401
 
 
 def test_chat_with_no_intended_mutation_leaves_board_unchanged(
-    authed_client, monkeypatch
+    authed_client, board_id, monkeypatch
 ):
     install_fake_ai(
         monkeypatch,
         [tool_response("Backlog has 2 cards.", [])],
     )
 
-    before = authed_client.get("/api/board").json()
+    before = authed_client.get(f"/api/boards/{board_id}").json()
 
     response = authed_client.post(
-        "/api/ai/chat",
+        f"/api/boards/{board_id}/ai/chat",
         json={"message": "What's in my Backlog column?", "history": []},
     )
 
@@ -67,7 +69,7 @@ def test_chat_with_no_intended_mutation_leaves_board_unchanged(
     assert body["board"] == before
 
 
-def test_chat_add_card_mutates_and_persists_board(authed_client, monkeypatch):
+def test_chat_add_card_mutates_and_persists_board(authed_client, board_id, monkeypatch):
     install_fake_ai(
         monkeypatch,
         [
@@ -86,7 +88,7 @@ def test_chat_add_card_mutates_and_persists_board(authed_client, monkeypatch):
     )
 
     response = authed_client.post(
-        "/api/ai/chat",
+        f"/api/boards/{board_id}/ai/chat",
         json={
             "message": "Add a card titled 'Test AI card' to Backlog",
             "history": [],
@@ -99,12 +101,12 @@ def test_chat_add_card_mutates_and_persists_board(authed_client, monkeypatch):
     new_card_id = backlog["cardIds"][-1]
     assert body["board"]["cards"][new_card_id]["title"] == "Test AI card"
 
-    refetched = authed_client.get("/api/board").json()
+    refetched = authed_client.get(f"/api/boards/{board_id}").json()
     assert refetched["cards"][new_card_id]["title"] == "Test AI card"
 
 
 def test_chat_skips_operation_with_unknown_column_without_failing(
-    authed_client, monkeypatch
+    authed_client, board_id, monkeypatch
 ):
     install_fake_ai(
         monkeypatch,
@@ -122,30 +124,35 @@ def test_chat_skips_operation_with_unknown_column_without_failing(
         ],
     )
 
-    before = authed_client.get("/api/board").json()
+    before = authed_client.get(f"/api/boards/{board_id}").json()
     response = authed_client.post(
-        "/api/ai/chat", json={"message": "add it somewhere odd", "history": []}
+        f"/api/boards/{board_id}/ai/chat",
+        json={"message": "add it somewhere odd", "history": []},
     )
 
     assert response.status_code == 200
     assert response.json()["board"] == before
 
 
-def test_chat_handles_malformed_model_output_gracefully(authed_client, monkeypatch):
+def test_chat_handles_malformed_model_output_gracefully(
+    authed_client, board_id, monkeypatch
+):
     fake_client = install_fake_ai(
         monkeypatch,
         [text_only_response("I refuse to use tools"), text_only_response("still no")],
     )
 
     response = authed_client.post(
-        "/api/ai/chat", json={"message": "hi", "history": []}
+        f"/api/boards/{board_id}/ai/chat", json={"message": "hi", "history": []}
     )
 
     assert response.status_code == 502
     assert len(fake_client.messages.calls) == 2
 
 
-def test_chat_includes_history_in_the_model_request(authed_client, monkeypatch):
+def test_chat_includes_history_in_the_model_request(
+    authed_client, board_id, monkeypatch
+):
     fake_client = install_fake_ai(
         monkeypatch,
         [tool_response("Sure, I remember.", [])],
@@ -156,7 +163,7 @@ def test_chat_includes_history_in_the_model_request(authed_client, monkeypatch):
         {"role": "assistant", "content": "Noted!"},
     ]
     response = authed_client.post(
-        "/api/ai/chat",
+        f"/api/boards/{board_id}/ai/chat",
         json={"message": "What's my favorite column?", "history": history},
     )
 
@@ -172,11 +179,11 @@ def test_chat_includes_history_in_the_model_request(authed_client, monkeypatch):
     assert "Current board state" in sent_messages[2]["content"]
 
 
-def test_chat_live_smoke(authed_client):
+def test_chat_live_smoke(authed_client, board_id):
     """Real call to the Anthropic API, matching docs/PLAN.md Part 9's
     acceptance of a live smoke test alongside the mocked cases above."""
     response = authed_client.post(
-        "/api/ai/chat",
+        f"/api/boards/{board_id}/ai/chat",
         json={"message": "Reply with the single word: pong", "history": []},
     )
 

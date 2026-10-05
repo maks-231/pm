@@ -15,7 +15,15 @@ const baseBoard: BoardData = {
   },
 };
 
-const getFirstColumn = () => screen.getAllByTestId(/column-/i)[0];
+const defaultProps = {
+  boardId: "board-1",
+  boards: [{ id: "board-1", name: "Board 1" }],
+  onSwitchBoard: () => {},
+  onCreateBoard: () => {},
+  onRenameBoard: () => {},
+  onDeleteBoard: () => {},
+  onLogout: () => {},
+};
 
 describe("KanbanBoard", () => {
   it("shows a loading state, then the board", async () => {
@@ -26,7 +34,7 @@ describe("KanbanBoard", () => {
       })
     );
 
-    render(<KanbanBoard onLogout={() => {}} />);
+    render(<KanbanBoard {...defaultProps} />);
     expect(screen.getByText(/loading your board/i)).toBeInTheDocument();
 
     resolveBoard(baseBoard);
@@ -39,7 +47,7 @@ describe("KanbanBoard", () => {
       .mockRejectedValueOnce(new Error("network error"))
       .mockResolvedValueOnce(baseBoard);
 
-    render(<KanbanBoard onLogout={() => {}} />);
+    render(<KanbanBoard {...defaultProps} />);
 
     expect(
       await screen.findByText(/couldn't load your board/i)
@@ -54,7 +62,7 @@ describe("KanbanBoard", () => {
     const renamed = { ...baseBoard, columns: [{ ...baseBoard.columns[0], title: "Triage" }, baseBoard.columns[1]] };
     vi.spyOn(api, "renameColumn").mockResolvedValue(renamed);
 
-    render(<KanbanBoard onLogout={() => {}} />);
+    render(<KanbanBoard {...defaultProps} />);
     const column = await screen.findByTestId("column-col-a");
     const input = within(column).getByLabelText("Column title");
 
@@ -62,7 +70,7 @@ describe("KanbanBoard", () => {
     await userEvent.type(input, "Triage");
     await userEvent.tab();
 
-    expect(api.renameColumn).toHaveBeenCalledWith("col-a", "Triage");
+    expect(api.renameColumn).toHaveBeenCalledWith("board-1", "col-a", "Triage");
     expect(await screen.findByDisplayValue("Triage")).toBeInTheDocument();
   });
 
@@ -81,7 +89,7 @@ describe("KanbanBoard", () => {
     vi.spyOn(api, "addCard").mockResolvedValue(withNewCard);
     vi.spyOn(api, "deleteCard").mockResolvedValue(baseBoard);
 
-    render(<KanbanBoard onLogout={() => {}} />);
+    render(<KanbanBoard {...defaultProps} />);
     const column = await screen.findByTestId("column-col-a");
 
     await userEvent.click(
@@ -99,7 +107,7 @@ describe("KanbanBoard", () => {
       within(column).getByRole("button", { name: /add card/i })
     );
 
-    expect(api.addCard).toHaveBeenCalledWith("col-a", "New card", "Notes");
+    expect(api.addCard).toHaveBeenCalledWith("board-1", "col-a", "New card", "Notes");
     expect(await within(column).findByText("New card")).toBeInTheDocument();
 
     const deleteButton = within(column).getByRole("button", {
@@ -107,7 +115,7 @@ describe("KanbanBoard", () => {
     });
     await userEvent.click(deleteButton);
 
-    expect(api.deleteCard).toHaveBeenCalledWith("card-2");
+    expect(api.deleteCard).toHaveBeenCalledWith("board-1", "card-2");
     await waitFor(() =>
       expect(within(column).queryByText("New card")).not.toBeInTheDocument()
     );
@@ -117,7 +125,7 @@ describe("KanbanBoard", () => {
     vi.spyOn(api, "getBoard").mockResolvedValue(baseBoard);
     vi.spyOn(api, "renameColumn").mockRejectedValue(new Error("boom"));
 
-    render(<KanbanBoard onLogout={() => {}} />);
+    render(<KanbanBoard {...defaultProps} />);
     const column = await screen.findByTestId("column-col-a");
     const input = within(column).getByLabelText("Column title");
 
